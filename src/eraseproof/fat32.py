@@ -224,7 +224,8 @@ def erase_path(image, internal_path, confirmation, evidence_dir, progress=None, 
         plan = {"image": target, "internal_path": internal_path, "files_and_folders": [e["path"] for e in selected],
                 "clusters": clusters, "metadata_slots": sorted(slots), "historical_sector_copies": len(history),
                 "scope": "FAT32 image allocation chains, current/deleted matching short-name metadata, and known aligned unallocated sector copies. Changed older versions and physical storage remain outside the proof."}
-        store.append("fat32-erasure.started", {"plan": plan})
+        job = "ep-"+str(uuid.uuid4())
+        store.append("fat32-erasure.started", {"job": job, "plan": plan})
         try:
             for index, cluster in enumerate(clusters):
                 checkpoint(cancel)
@@ -272,10 +273,10 @@ def erase_path(image, internal_path, confirmation, evidence_dir, progress=None, 
                       "filesystem_preserved": True, "scope": plan["scope"], "all_filesystem_copies_verified": False}
             if not passed:
                 raise EraseProofError("Target-specific residue verification failed. No certificate issued.")
-            return store.certify({"schema": "eraseproof.native-evidence.v1", "id": "ep-"+str(uuid.uuid4()),
+            return store.certify({"schema": "eraseproof.native-evidence.v1", "id": job,
                                   "operation": "offline-fat32-targeted-erasure", "issued_at": now(), "target": target,
                                   "plan": plan, "verification": result, "assurance": plan["scope"]})
         except BaseException as error:
             os.fsync(stream.fileno())
-            store.append("fat32-erasure.incomplete", {"image": target["path"], "reason": str(error)})
+            store.append("fat32-erasure.incomplete", {"job": job, "image": target["path"], "reason": str(error)})
             raise

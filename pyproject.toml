@@ -21,7 +21,7 @@ eraseproof-desktop = "eraseproof.desktop:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-eraseproof = ["resources/*.svg"]
+eraseproof = ["resources/*.svg", "resources/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

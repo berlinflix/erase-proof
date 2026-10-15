@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import tempfile
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 from eraseproof.desktop import MainWindow, STYLE
@@ -25,7 +26,7 @@ output.mkdir(parents=True, exist_ok=True)
 app = QApplication([])
 app.setStyle("Fusion")
 app.setStyleSheet(STYLE)
-window = MainWindow(output/"workspace")
+window = MainWindow(Path(tempfile.mkdtemp(prefix="eraseproof-visual-")))
 window.resize(1280, 900)
 window.show()
 window.create_demo()

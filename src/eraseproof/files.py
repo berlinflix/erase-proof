@@ -87,7 +87,8 @@ def erase_files(path, confirmation, evidence_dir, progress=None, cancel=None, un
         raise EraseProofError("Audit history failed integrity validation.")
     store.key()  # Signing readiness is checked before any destructive write.
     started, started_at = time.monotonic(), now()
-    store.append("file-erasure.started", {"plan": prepared})
+    job = "ep-"+str(uuid.uuid4())
+    store.append("file-erasure.started", {"job": job, "plan": prepared})
     measurements, total_written = [], 0
     try:
         for index, item in enumerate(prepared["files"]):
@@ -151,12 +152,12 @@ def erase_files(path, confirmation, evidence_dir, progress=None, cancel=None, un
                 os.rmdir(folder)  # Refuses any new/unplanned children rather than recursively deleting them.
         result = {"passed": True, "bytes_checked": sum(m["bytes_checked"] for m in measurements), "nonzero_bytes": 0,
                   "rrs": None, "files": measurements, "scope": prepared["scope"], "all_filesystem_copies_verified": False}
-        record = store.certify({"schema": "eraseproof.native-evidence.v1", "id": "ep-"+str(uuid.uuid4()),
+        record = store.certify({"schema": "eraseproof.native-evidence.v1", "id": job,
                                 "operation": "logical-file-erasure", "started_at": started_at, "issued_at": now(),
                                 "duration_seconds": time.monotonic()-started, "target": {"path": prepared["root"], "kind": "file-tree", "size": prepared["bytes"]},
                                 "plan": prepared, "verification": result,
                                 "assurance": "Verified current logical file-byte overwrite only. This record explicitly does not establish secure removal of filesystem history or physical-media copies."})
         return record
     except BaseException as error:
-        store.append("file-erasure.incomplete", {"root": prepared["root"], "completed_files": len(measurements), "bytes_written": total_written, "reason": str(error)})
+        store.append("file-erasure.incomplete", {"job": job, "root": prepared["root"], "completed_files": len(measurements), "bytes_written": total_written, "reason": str(error)})
         raise

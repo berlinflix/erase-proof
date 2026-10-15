@@ -343,12 +343,17 @@ class MainWindow(QMainWindow):
         evidence, box = panel("Signed operator records", "Ed25519 signatures bind the measurements to the target and audit head. These are self-signed local records, not external operator identity or compliance attestations.")
         self.integrity_label = label("")
         box.addWidget(self.integrity_label)
+        self.trusted_fingerprint = QLineEdit()
+        self.trusted_fingerprint.setPlaceholderText("Optional expected signer fingerprint - full SHA-256 from a trusted channel")
+        self.trusted_fingerprint.setAccessibleName("Trusted operator signer fingerprint")
+        box.addWidget(self.trusted_fingerprint)
         self.records_table = table(["RECORD", "TARGET", "CHECKED BYTES", "ISSUED UTC"])
         self.records_table.doubleClicked.connect(self.view_record)
         box.addWidget(self.records_table)
         row = QHBoxLayout()
         row.addWidget(button("View selected record", self.view_record))
         row.addWidget(button("Export signed JSON…", self.export_record))
+        row.addWidget(button("Export PDF + QR…", self.export_pdf))
         row.addStretch()
         row.addWidget(button("Verify a record…", self.check_record))
         row.addWidget(button("Export audit…", self.export_audit))
@@ -705,9 +710,11 @@ class MainWindow(QMainWindow):
         self.execute(lambda progress, cancel: erase(path, info["serial"], self.store.root, refs, device, progress, cancel), done)
 
     def refresh_evidence(self):
-        self.records = self.store.records()
+        intact = self.store.check()
+        self.records = self.store.records() if intact else []
         fill_table(self.records_table, [(r["payload"]["id"][:19], Path(r["payload"]["target"]["path"]).name, r["payload"]["verification"]["bytes_checked"], r["payload"]["issued_at"][:19]) for r in self.records])
-        self.integrity_label.setText(f"Audit chain {'intact' if self.store.check() else 'FAILED'} · {len(self.store.events())} linked events · {len(self.records)} signed records")
+        unresolved = len(self.store.unresolved_jobs()) if intact else 0
+        self.integrity_label.setText(f"Audit chain intact · {len(self.store.events())} events · {len(self.records)} records · {unresolved} jobs without completion evidence" if intact else "AUDIT INTEGRITY FAILED - evidence writes blocked. Preserve this case for investigation.")
 
     def current_record(self):
         row = self.records_table.currentRow()
@@ -735,6 +742,19 @@ class MainWindow(QMainWindow):
         if record:
             self.export_json(record, record["payload"]["id"]+".epcert.json")
 
+    def export_pdf(self):
+        from .certificate import render
+        record = self.current_record()
+        if not record:
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Export PDF with signed JSON attachment", str(self.workspace/(record["payload"]["id"]+".pdf")), "PDF (*.pdf)")
+        if path:
+            try:
+                render(record, path)
+                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+            except Exception as error:
+                self.on_error(str(error))
+
     def export_json(self, value, default):
         path, _ = QFileDialog.getSaveFileName(self, "Export evidence", str(self.workspace/default), "JSON (*.json)")
         if path:
@@ -744,14 +764,19 @@ class MainWindow(QMainWindow):
                 self.on_error(str(error))
 
     def export_audit(self):
-        self.export_json({"schema": "eraseproof.audit.v1", "intact": self.store.check(), "events": self.store.events()}, "eraseproof-audit.json")
+        try:
+            self.export_json(self.store.export(), "eraseproof-audit.json")
+        except Exception as error:
+            self.on_error(str(error))
 
     def check_record(self):
         path, _ = QFileDialog.getOpenFileName(self, "Verify signed evidence", str(self.workspace), "JSON (*.json)")
         if path:
             try:
-                valid = verify_record(json.loads(Path(path).read_text()))
-                QMessageBox.information(self, "Evidence verification", "Signature and payload match. The embedded key is self-signed; operator identity is not independently authenticated." if valid else "Record integrity failed. Payload, signature or signer fingerprint differs.")
+                record = json.loads(Path(path).read_text())
+                expected = self.trusted_fingerprint.text().strip() or None
+                valid = verify_record(record, expected)
+                QMessageBox.information(self, "Evidence verification", ("Signature matches the expected signer fingerprint." if expected else "Signature and payload match. Operator identity has not been authenticated against an expected fingerprint.") if valid else "Record integrity or expected signer check failed.")
             except Exception as error:
                 self.on_error(str(error))
 

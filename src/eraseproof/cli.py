@@ -103,8 +103,20 @@ def parser():
     es.add_argument("--case", required=True)
     cs = sub.add_parser("record", help="Verify an exported signed record")
     cs.add_argument("file")
+    cs.add_argument("--trusted-fingerprint", help="Expected full signer SHA-256 obtained through a trusted channel")
+    pdf = sub.add_parser("pdf", help="Render a scoped PDF summary, offline QR reference and attached signed JSON")
+    pdf.add_argument("record")
+    pdf.add_argument("--output", required=True)
+    pdf_record = sub.add_parser("pdf-record", help="Verify a PDF's attached signed JSON; the PDF wrapper itself is not authenticated")
+    pdf_record.add_argument("file")
+    pdf_record.add_argument("--trusted-fingerprint")
     audit = sub.add_parser("audit", help="Check and export a local case audit chain")
     audit.add_argument("case")
+    audit.add_argument("--anchor", help="Previously exported signed anchor or audit export")
+    audit.add_argument("--trusted-fingerprint")
+    audit_export = sub.add_parser("audit-export", help="Export records, events and a signed checkpoint; preserve it independently")
+    audit_export.add_argument("case")
+    audit_export.add_argument("--output", required=True)
     fp = sub.add_parser("file-plan", help="Inspect a logical file/folder overwrite without changing it")
     fp.add_argument("target")
     fe = sub.add_parser("erase-files", help="Overwrite current file bytes and unlink; explicitly excludes filesystem history")
@@ -180,13 +192,42 @@ def main(argv=None):
             with destination.open("x") as file:
                 json.dump(output, file, indent=2)
             output = {"certificate": str(destination), "record": output}
-        elif args.command == "record":
-            valid = verify_record(json.loads(Path(args.file).read_text()))
-            output, status = {"signature_valid": valid, "identity": "embedded self-signed operator key"}, 0 if valid else 2
+        elif args.command in ("record", "pdf-record"):
+            if args.command == "pdf-record":
+                from .certificate import attached_record
+                record = attached_record(args.file)
+            else:
+                record = json.loads(Path(args.file).read_text())
+            valid = verify_record(record)
+            trusted = verify_record(record, args.trusted_fingerprint) if args.trusted_fingerprint is not None else None
+            output = {"signature_valid": valid, "trusted_signer": trusted, "signer_fingerprint": record.get("signer_fingerprint"),
+                      "identity": "matched expected signer" if trusted else "operator identity not established", "pdf_wrapper_authenticated": False}
+            status = 0 if valid and trusted is not False else 2
+        elif args.command == "pdf":
+            from .certificate import render
+            output = render(json.loads(Path(args.record).read_text()), args.output)
         elif args.command == "audit":
+            if not (Path(args.case)/"evidence.sqlite3").is_file():
+                raise EraseProofError("This case has no evidence database.")
             store = EvidenceStore(args.case)
-            output = {"intact": store.check(), "events": store.events()}
-            status = 0 if output["intact"] else 2
+            intact = store.check()
+            matches = None
+            if args.anchor:
+                anchor = json.loads(Path(args.anchor).read_text())
+                matches = store.check_anchor(anchor.get("anchor", anchor), args.trusted_fingerprint)
+            elif args.trusted_fingerprint:
+                raise EraseProofError("A trusted fingerprint requires an --anchor to check.")
+            output = {"intact": intact, "anchor_matches": matches, "unresolved_jobs": store.unresolved_jobs() if intact else None,
+                      "events": store.events() if intact else [], "scope": "A local chain alone cannot detect tail deletion; compare with a separately protected checkpoint."}
+            status = 0 if intact and matches is not False else 2
+        elif args.command == "audit-export":
+            if not (Path(args.case)/"evidence.sqlite3").is_file():
+                raise EraseProofError("This case has no evidence database.")
+            store = EvidenceStore(args.case)
+            export = store.export()
+            with Path(args.output).open("x") as file:
+                json.dump(export, file, indent=2)
+            output = {"path": str(Path(args.output).resolve()), "anchor": export["anchor"], "instruction": "Preserve the checkpoint outside this case; establish the signer fingerprint independently."}
         elif args.command == "file-plan":
             output = plan_files(args.target)
         elif args.command == "erase-files":

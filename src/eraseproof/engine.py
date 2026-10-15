@@ -123,6 +123,7 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
     store = EvidenceStore(evidence_dir)
     if not store.check():
         raise EraseProofError("Audit history is damaged. No overwrite was started.")
+    store.key()  # Fail signing-readiness checks before destructive I/O.
     # Evidence must not reside on the target being erased (for virtual devices,
     # an unmounted target cannot contain the case folder).
     if Path(evidence_dir).resolve() == Path(path).resolve():
@@ -139,7 +140,8 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
         if progress:
             progress("Discover", 0, f"Identity pinned: {target['path']}")
         before = hash_stream(stream, target["size"], cancel)
-        store.append("erasure.started", {"target": target, "before_sha256": before, "method": prepared["method"]})
+        job = "ep-"+str(uuid.uuid4())
+        store.append("erasure.started", {"job": job, "target": target, "before_sha256": before, "method": prepared["method"]})
         stream.seek(0)
         written, zeros = 0, bytes(carve.CHUNK)
         try:
@@ -164,9 +166,9 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
                 raise EraseProofError("Image size changed during verification. Certification refused.")
         except BaseException as error:
             os.fsync(stream.fileno())
-            store.append("erasure.incomplete", {"target": target["path"], "bytes_written": written, "reason": str(error)})
+            store.append("erasure.incomplete", {"job": job, "target": target["path"], "bytes_written": written, "reason": str(error)})
             raise
-        record = store.certify({"schema": "eraseproof.native-evidence.v1", "id": "ep-"+str(uuid.uuid4()),
+        record = store.certify({"schema": "eraseproof.native-evidence.v1", "id": job,
                                 "started_at": started_at, "issued_at": now(), "duration_seconds": time.monotonic()-started,
                                 "target": target, "plan": prepared, "before_sha256": before, "verification": result,
                                 "assurance": "Self-signed local operator evidence. Logical overwrite only; not a NIST/IEEE compliance or physical-media sanitization certificate."})

@@ -10,7 +10,8 @@ VirtualBox acceptance tests are deliberately deferred at the user's request.
 | Targeted erasure | File/folder engine, allocation-aware FAT32 image cleanup, free-space history sweep, transparent residue findings | Complete; 20 WSL tests passed, including preservation of unrelated live files and FAT32 fsck checks |
 | Forensic recovery | Expanded signatures/validation, bounded PNG gap reconstruction, independent tool results, partition offsets | Complete; 26 WSL tests passed, including actual ffmpeg/7z fixtures, real PhotoRec/TSK and GPT corruption rejection |
 | Media-aware operations | NVMe/ATA discovery, controller-wide guarded NVMe submission, real LUKS2 image keyslot removal, scoped receipts | Software milestone complete; 38 WSL tests passed. Physical firmware behavior remains unverified; ATA destructive/HPA/DCO changes are not enabled |
-| Evidence and distribution | Trusted signer checks, PDF/QR records, audit anchors, native GUI integration, live-image build workflow, release packaging | Planned |
+| Evidence | Trusted signer checks, attached signed JSON in PDF/QR reports, audit anchors, interrupted-job visibility, native GUI integration | Complete; 44 WSL tests passed; two-page PDF visually reviewed and QR decoded from its rendered page |
+| Distribution | Updated standalone executable, source/runtime installers, live-image build workflow, release packaging | In progress |
 
 Software tests use generated images and mock hardware command boundaries.
 Firmware behavior and physical remanence cannot be measured without spare
