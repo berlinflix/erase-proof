@@ -11,7 +11,7 @@ from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy,
+    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy, QInputDialog,
     QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -20,6 +20,8 @@ from .cli import recover, references
 from .engine import erase, plan, verify
 from .evidence import EvidenceStore, verify_record
 from .targets import describe, devices, descendants
+from .files import plan_files, erase_files
+from .fat32 import Fat32, erase_path
 
 
 STYLE = """
@@ -170,7 +172,7 @@ class MainWindow(QMainWindow):
         side.addWidget(label("WORKSPACE", "sideCaption"))
         side.addSpacing(7)
         self.nav = []
-        for index, title in enumerate(("01   Experiment", "02   Recover files", "03   Erase & verify", "04   Evidence", "05   Device inventory")):
+        for index, title in enumerate(("01   Experiment", "02   Recover files", "03   Erase & verify", "04   Evidence", "05   Device inventory", "06   Targeted erasure")):
             item = button(title, lambda checked=False, i=index: self.switch(i))
             item.setObjectName("nav")
             item.setCheckable(True)
@@ -201,6 +203,7 @@ class MainWindow(QMainWindow):
         self._erasure()
         self._evidence()
         self._devices()
+        self._targeted()
 
         progress_panel, status = panel("")
         status.setContentsMargins(16, 12, 16, 12)
@@ -351,12 +354,101 @@ class MainWindow(QMainWindow):
         layout.addWidget(inventory, 1)
         self.stack.addWidget(page)
 
+    def _targeted(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        logical, box = panel("Ordinary file / folder", "Overwrites and verifies current file bytes, then unlinks. Journals, snapshots and historical copies are explicitly outside this operation's assurance.")
+        row = QHBoxLayout()
+        self.file_target = QLineEdit()
+        self.file_target.setPlaceholderText("Select an ordinary file or folder")
+        row.addWidget(self.file_target, 1)
+        row.addWidget(self.registered("File…", self.choose_file_target))
+        row.addWidget(self.registered("Folder…", self.choose_folder_target))
+        box.addLayout(row)
+        row = QHBoxLayout()
+        row.addWidget(self.registered("Inspect logical plan", self.inspect_file_target))
+        row.addStretch()
+        row.addWidget(self.registered("Overwrite & unlink…", self.erase_file_target, True))
+        box.addLayout(row)
+        layout.addWidget(logical)
+        offline, box = panel("Offline FAT32 file / folder", "Preserves unrelated live files. Removes selected allocation chains and matching deleted-name records, then searches proven free clusters for known sector copies. Use an unattached FAT32 volume image.")
+        self.fat_image = QLineEdit()
+        self.source_row(box, self.fat_image)
+        row = QHBoxLayout()
+        self.fat_internal = QLineEdit("/REPORT.PDF")
+        row.addWidget(self.fat_internal, 1)
+        row.addWidget(self.registered("List image files", self.list_fat))
+        row.addWidget(self.registered("Erase image path…", self.erase_fat_target, True))
+        box.addLayout(row)
+        layout.addWidget(offline)
+        self.targeted_details = QPlainTextEdit()
+        self.targeted_details.setReadOnly(True)
+        self.targeted_details.setPlaceholderText("Plans, filesystem entries and measured results appear here.")
+        layout.addWidget(self.targeted_details, 1)
+        self.stack.addWidget(page)
+
+    def choose_file_target(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select the actual file to overwrite", str(self.workspace))
+        if path:
+            self.file_target.setText(path)
+
+    def choose_folder_target(self):
+        path = QFileDialog.getExistingDirectory(self, "Select the actual folder to overwrite", str(self.workspace))
+        if path:
+            self.file_target.setText(path)
+
+    def inspect_file_target(self):
+        try:
+            self.targeted_details.setPlainText(json.dumps(plan_files(self.file_target.text()), indent=2))
+        except Exception as error:
+            self.on_error(str(error))
+
+    def erase_file_target(self):
+        try:
+            prepared = plan_files(self.file_target.text())
+            self.targeted_details.setPlainText(json.dumps(prepared, indent=2))
+            text, accepted = QInputDialog.getText(self, "Confirm logical file/folder erasure", "This overwrites current bytes and unlinks the selected files. It does not prove removal of journal/snapshot copies.\n\nType exactly: "+prepared["confirmation"])
+            if not accepted:
+                return
+            if text != prepared["confirmation"]:
+                return self.on_error("Confirmation did not match. Nothing was erased.")
+            def done(record):
+                self.targeted_details.setPlainText(json.dumps(record, indent=2))
+                self.status_label.setText("Current logical bytes verified and files unlinked. Historical/physical copies are not certified.")
+            self.execute(lambda progress, cancel: erase_files(prepared["root"], text, self.store.root, progress, cancel), done)
+        except Exception as error:
+            self.on_error(str(error))
+
+    def list_fat(self):
+        try:
+            path = self.fat_image.text()
+            with open(path, "rb") as stream:
+                entries = list(Fat32(stream, Path(path).stat().st_size).walk())
+            self.targeted_details.setPlainText(json.dumps(entries, indent=2))
+        except Exception as error:
+            self.on_error(str(error))
+
+    def erase_fat_target(self):
+        path, internal = self.fat_image.text(), self.fat_internal.text()
+        expected = Path(path).name+":"+"/"+internal.strip("/")
+        text, accepted = QInputDialog.getText(self, "Confirm FAT32 targeted erasure", "This changes the actual image allocation chains and metadata.\n\nType exactly: "+expected)
+        if not accepted:
+            return
+        if text != expected:
+            return self.on_error("Confirmation did not match. Nothing was erased.")
+        def done(record):
+            self.targeted_details.setPlainText(json.dumps(record, indent=2))
+            self.status_label.setText("FAT32 selected target and known free-space copies verified. Unrelated live files preserved.")
+        self.execute(lambda progress, cancel: erase_path(path, internal, text, self.store.root, progress, cancel), done)
+
     def switch(self, index):
         titles = [("The recovery experiment", "A reproducible filesystem experiment for your Ubuntu VM."),
                   ("See what survives.", "Filesystem metadata recovery and native contiguous file carving."),
                   ("Erase. Attack. Verify.", "Measured logical erasure, with explicit target identity and evidence."),
                   ("Keep the proof.", "Signed results and a transactional, hash-chained audit history."),
                   ("Know your target.", "Inspect actual Linux devices before preparing an operation.")]
+        titles.append(("Choose what to remove.", "Logical file erasure and offline FAT32 allocation-aware cleanup."))
         self.title.setText(titles[index][0])
         self.subtitle.setText(titles[index][1])
         self.stack.setCurrentIndex(index)
@@ -368,6 +460,7 @@ class MainWindow(QMainWindow):
         self.reference_file = reference_file
         self.recovery_source.setText(self.target)
         self.erase_source.setText(self.target)
+        self.fat_image.setText(self.target)
 
     def choose_source(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open raw disk image", str(self.workspace), "Raw images (*.img *.raw *.dd *.bin);;All files (*)")

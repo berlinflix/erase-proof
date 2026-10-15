@@ -49,6 +49,25 @@ CLI results are JSON; progress goes to stderr. Verification uses exit code 2 for
 
 ## Actual secondary virtual disks
 
+## Targeted file and folder operations
+
+The native **Targeted erasure** page and CLI support two distinct operations:
+
+- `file-plan` / `erase-files`: pin each ordinary file's identity, overwrite and read back its current bytes, then unlink. Symlinks, hard links, protected system paths, cross-device trees and evidence inside the target are refused. The signed record explicitly excludes journals, snapshots and previous copies.
+- `fat32-list` / `fat32-erase`: edit an offline, unattached FAT32 volume image. The engine validates both FAT copies and allocation chains, erases selected file/folder clusters and long/short directory records, searches free clusters for known sector copies, and preserves unrelated live files. Tests run `fsck.fat` and byte-match preserved files after the operation.
+
+```bash
+eraseproof file-plan /path/to/selected-folder
+eraseproof erase-files /path/to/selected-folder --confirm selected-folder --case ~/EraseProof/evidence-files
+eraseproof fat32-list ~/EraseProof/demo-01/experiment.img
+eraseproof fat32-erase ~/EraseProof/demo-01/experiment.img /REPORT.PDF \
+  --confirm experiment.img:/REPORT.PDF --case ~/EraseProof/evidence-targeted
+```
+
+FAT32 cleanup is bounded to known image allocation and reference evidence. It does not imply ext4/NTFS journal cleanup or physical flash sanitization.
+
+## Actual secondary virtual disks
+
 The core also contains a gated logical-overwrite path for a **recognized, unmounted secondary virtual disk**. It refuses mounted disks/children, read-only disks, partitions, missing serials, and unrecognized physical-drive models. It checks target identity, locks the opened target and requires both the allowlisted path and exact serial.
 
 ```bash

@@ -13,6 +13,8 @@ from .engine import erase, plan, verify
 from .evidence import EvidenceStore, verify_record
 from .models import EraseProofError
 from .targets import describe, devices, descendants, find_device
+from .files import plan_files, erase_files
+from .fat32 import Fat32, erase_path
 
 
 def references(path):
@@ -100,6 +102,20 @@ def parser():
     cs.add_argument("file")
     audit = sub.add_parser("audit", help="Check and export a local case audit chain")
     audit.add_argument("case")
+    fp = sub.add_parser("file-plan", help="Inspect a logical file/folder overwrite without changing it")
+    fp.add_argument("target")
+    fe = sub.add_parser("erase-files", help="Overwrite current file bytes and unlink; explicitly excludes filesystem history")
+    fe.add_argument("target")
+    fe.add_argument("--confirm", required=True)
+    fe.add_argument("--case", required=True)
+    fe.add_argument("--keep-zeroed", action="store_true")
+    fs = sub.add_parser("fat32-list", help="List live/deleted entries in an offline FAT32 volume image")
+    fs.add_argument("image")
+    fw = sub.add_parser("fat32-erase", help="Erase a selected FAT32 image file/folder and known free-space copies")
+    fw.add_argument("image")
+    fw.add_argument("internal_path")
+    fw.add_argument("--confirm", required=True)
+    fw.add_argument("--case", required=True)
     return result
 
 
@@ -142,6 +158,15 @@ def main(argv=None):
             store = EvidenceStore(args.case)
             output = {"intact": store.check(), "events": store.events()}
             status = 0 if output["intact"] else 2
+        elif args.command == "file-plan":
+            output = plan_files(args.target)
+        elif args.command == "erase-files":
+            output = erase_files(args.target, args.confirm, args.case, progress, unlink=not args.keep_zeroed)
+        elif args.command == "fat32-list":
+            with open(args.image, "rb") as stream:
+                output = list(Fat32(stream, Path(args.image).stat().st_size).walk())
+        elif args.command == "fat32-erase":
+            output = erase_path(args.image, args.internal_path, args.confirm, args.case, progress)
         print(json.dumps(output, indent=2))
         return status
     except (EraseProofError, OSError, ValueError, KeyError) as error:
