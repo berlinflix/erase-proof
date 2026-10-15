@@ -16,7 +16,7 @@ jobs:
       - name: Install filesystem and desktop runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y dosfstools mtools sleuthkit testdisk gcc ffmpeg p7zip-full libegl1 libopengl0
+          sudo apt-get install -y dosfstools mtools sleuthkit testdisk gcc ffmpeg p7zip-full nvme-cli hdparm cryptsetup-bin libegl1 libopengl0
       - name: Install project
         run: python -m pip install -e '.[desktop,test]'
       - name: Test native engine and Qt workflow

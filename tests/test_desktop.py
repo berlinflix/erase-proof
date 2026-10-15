@@ -29,8 +29,8 @@ def test_native_window_pages_and_background_recovery(tmp_path):
     window = MainWindow(tmp_path/"native-workspace")
     window.show()
     application.processEvents()
-    assert window.stack.count() == 6
-    for index in range(6):
+    assert window.stack.count() == 7
+    for index in range(7):
         window.switch(index)
         assert window.stack.currentIndex() == index
         assert window.nav[index].isChecked()

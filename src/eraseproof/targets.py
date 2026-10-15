@@ -83,7 +83,7 @@ def describe(path):
     raise EraseProofError("Only regular image files and Linux block devices are supported.")
 
 
-def open_target(path, writable=False):
+def open_target(path, writable=False, *, lock=True):
     flags = os.O_RDWR if writable else os.O_RDONLY
     flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     if writable and stat.S_ISBLK(os.lstat(path).st_mode):
@@ -97,8 +97,9 @@ def open_target(path, writable=False):
         if writable:
             if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
                 raise EraseProofError("Hard-linked files are refused for destructive operations.")
-            import fcntl
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if lock:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return os.fdopen(fd, "r+b" if writable else "rb", buffering=0)
     except BaseException:
         os.close(fd)

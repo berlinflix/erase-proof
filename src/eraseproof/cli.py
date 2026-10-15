@@ -129,6 +129,22 @@ def parser():
     partitions = sub.add_parser("partitions", help="Read-only primary MBR/GPT discovery; validate GPT checksums and bounds")
     partitions.add_argument("target")
     partitions.add_argument("--sector-size", type=int, choices=[512, 4096], default=512)
+    media = sub.add_parser("media-probe", help="Inspect image encryption or native NVMe/ATA capabilities without writing")
+    media.add_argument("target")
+    for name in ("nvme-plan", "nvme-submit"):
+        operation = sub.add_parser(name, help="Prepare or explicitly submit controller-wide NVMe sanitize; never issues an erasure certificate")
+        operation.add_argument("controller")
+        operation.add_argument("--method", choices=["block-erase", "crypto-erase"], required=True)
+        operation.add_argument("--allow-controller", required=True)
+        operation.add_argument("--confirm", required=True)
+        if name == "nvme-submit":
+            operation.add_argument("--case", required=True)
+    status = sub.add_parser("nvme-status", help="Read controller sanitize status; firmware jobs continue independently of this process")
+    status.add_argument("controller")
+    luks = sub.add_parser("luks-erase", help="Remove active software LUKS2 image keyslots; ciphertext/backups remain outside this operation")
+    luks.add_argument("image")
+    luks.add_argument("--confirm", required=True)
+    luks.add_argument("--case", required=True)
     return result
 
 
@@ -146,7 +162,7 @@ def main(argv=None):
         if args.command == "doctor":
             output = {"version": __version__, "platform": platform.platform(), "python": sys.version.split()[0],
                       "tools": {name: shutil.which(name) for name in ("lsblk", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm")},
-                      "physical_device_sanitization": "not implemented", "native_interface": "Qt / PySide6"}
+                      "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":
             output = devices()
         elif args.command == "demo":
@@ -190,6 +206,21 @@ def main(argv=None):
         elif args.command == "partitions":
             from .partitions import inspect
             output = inspect(args.target, args.sector_size)
+        elif args.command == "media-probe":
+            from .media import probe
+            output = probe(args.target)
+        elif args.command == "nvme-plan":
+            from .media import nvme_probe, nvme_plan
+            output = nvme_plan(nvme_probe(args.controller), args.method, args.allow_controller, args.confirm)
+        elif args.command == "nvme-submit":
+            from .media import submit_nvme
+            output = submit_nvme(args.controller, args.method, args.allow_controller, args.confirm, args.case)
+        elif args.command == "nvme-status":
+            from .media import nvme_status
+            output = nvme_status(args.controller)
+        elif args.command == "luks-erase":
+            from .media import erase_luks_image
+            output = erase_luks_image(args.image, args.confirm, args.case)
         print(json.dumps(output, indent=2))
         return status
     except (EraseProofError, OSError, ValueError, KeyError) as error:

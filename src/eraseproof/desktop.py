@@ -172,7 +172,7 @@ class MainWindow(QMainWindow):
         side.addWidget(label("WORKSPACE", "sideCaption"))
         side.addSpacing(7)
         self.nav = []
-        for index, title in enumerate(("01   Experiment", "02   Recover files", "03   Erase & verify", "04   Evidence", "05   Device inventory", "06   Targeted erasure")):
+        for index, title in enumerate(("01   Experiment", "02   Recover files", "03   Erase & verify", "04   Evidence", "05   Device inventory", "06   Targeted erasure", "07   Media methods")):
             item = button(title, lambda checked=False, i=index: self.switch(i))
             item.setObjectName("nav")
             item.setCheckable(True)
@@ -204,6 +204,7 @@ class MainWindow(QMainWindow):
         self._evidence()
         self._devices()
         self._targeted()
+        self._media()
 
         progress_panel, status = panel("")
         status.setContentsMargins(16, 12, 16, 12)
@@ -407,6 +408,49 @@ class MainWindow(QMainWindow):
         if path:
             self.file_target.setText(path)
 
+    def _media(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        discovery, box = panel("Inspect the medium", "Read actual capabilities before choosing a method. NVMe commands affect every namespace on a controller. ATA inspection includes native capacity and DCO responses; failed queries remain unknown.")
+        self.media_source = QLineEdit()
+        self.media_source.setPlaceholderText("Image, /dev/sdX, or NVMe controller /dev/nvmeX")
+        box.addWidget(self.media_source)
+        row = QHBoxLayout()
+        row.addWidget(self.registered("Inspect capabilities", self.inspect_media, True))
+        row.addWidget(self.registered("Read NVMe status", self.inspect_nvme_status))
+        row.addStretch()
+        box.addLayout(row)
+        layout.addWidget(discovery)
+        keyslots, box = panel("Software LUKS2 image", "Remove active keyslots from an unattached LUKS2 image. This leaves ciphertext and external header/key backups outside the operation. A keyslot removal receipt is separate from a verified-overwrite certificate.")
+        box.addWidget(self.registered("Remove image keyslots…", self.erase_luks_target))
+        layout.addWidget(keyslots)
+        self.media_details = QPlainTextEdit()
+        self.media_details.setReadOnly(True)
+        self.media_details.setPlaceholderText("Hardware submission is an explicit privileged CLI operation. Inspect capabilities here first.\n\nNo firmware operation or physical-media behavior has been tested on your disks.")
+        layout.addWidget(self.media_details, 1)
+        self.stack.addWidget(page)
+
+    def inspect_media(self):
+        from .media import probe
+        path = self.media_source.text().strip()
+        def done(result):
+            self.media_details.setPlainText(json.dumps(result, indent=2))
+            self.status_label.setText("Capability inspection complete. No media command was submitted.")
+        self.execute(lambda progress, cancel: probe(path), done)
+
+    def inspect_nvme_status(self):
+        from .media import nvme_status
+        path = self.media_source.text().strip()
+        self.execute(lambda progress, cancel: nvme_status(path), lambda result: self.media_details.setPlainText(json.dumps(result, indent=2)))
+
+    def erase_luks_target(self):
+        from .media import erase_luks_image
+        path = self.media_source.text().strip()
+        text, accepted = QInputDialog.getText(self, "Remove active LUKS2 image keyslots", "This makes the image inaccessible without another header or key copy. This does not overwrite its ciphertext.\n\nType exactly: "+Path(path).name)
+        if accepted:
+            self.execute(lambda progress, cancel: erase_luks_image(path, text, self.store.root), lambda result: self.media_details.setPlainText(json.dumps(result, indent=2)))
+
     def choose_folder_target(self):
         path = QFileDialog.getExistingDirectory(self, "Select the actual folder to overwrite", str(self.workspace))
         if path:
@@ -463,6 +507,7 @@ class MainWindow(QMainWindow):
                   ("Keep the proof.", "Signed results and a transactional, hash-chained audit history."),
                   ("Know your target.", "Inspect actual Linux devices before preparing an operation.")]
         titles.append(("Choose what to remove.", "Logical file erasure and offline FAT32 allocation-aware cleanup."))
+        titles.append(("Choose a method with evidence.", "Native capability inspection, firmware status and LUKS2 keyslot removal."))
         self.title.setText(titles[index][0])
         self.subtitle.setText(titles[index][1])
         self.stack.setCurrentIndex(index)
@@ -475,6 +520,7 @@ class MainWindow(QMainWindow):
         self.recovery_source.setText(self.target)
         self.erase_source.setText(self.target)
         self.fat_image.setText(self.target)
+        self.media_source.setText(self.target)
 
     def choose_source(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open raw disk image", str(self.workspace), "Raw images (*.img *.raw *.dd *.bin);;All files (*)")
@@ -490,6 +536,9 @@ class MainWindow(QMainWindow):
         if self.job and self.job.isRunning():
             return
         for item in self.action_buttons:
+            item.setEnabled(False)
+        self.busy_inputs = self.findChildren(QLineEdit)+self.findChildren(QComboBox)+self.findChildren(QCheckBox)
+        for item in self.busy_inputs:
             item.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self.progress_bar.setValue(0)
@@ -507,6 +556,8 @@ class MainWindow(QMainWindow):
 
     def on_finished(self):
         for item in self.action_buttons:
+            item.setEnabled(True)
+        for item in getattr(self, "busy_inputs", []):
             item.setEnabled(True)
         self.cancel_button.setEnabled(False)
         self.refresh_evidence()

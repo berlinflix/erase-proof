@@ -94,6 +94,8 @@ Device names are examples, not instructions to choose `/dev/sdb` blindly. Device
 
 ## Assurance and remaining work
 
+The **Media methods** page and CLI inspect native NVMe/ATA capabilities and software LUKS2 images. A guarded CLI adapter can submit controller-wide NVMe block/crypto sanitize with all-namespace checks, but returns an audited firmware receipt rather than an erasure certificate. LUKS2 keyslot removal has been tested on a real generated image. See [media operations and boundaries](docs/MEDIA.md) before using hardware commands. ATA destructive commands and HPA/DCO changes remain disabled.
+
 This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
 
 ATA/NVMe sanitize, hidden HPA/DCO handling, journal-aware targeted file/folder scrubbing, fragmented carving, a bootable live USB, operator trust infrastructure, QR/PDF certificates and compliance mapping remain implementation milestones. There is no claim that this prototype securely deletes all copies of a host file or fulfills NIST/IEEE sanitization requirements.
