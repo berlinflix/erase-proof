@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from .models import EraseProofError
+from . import __version__
 
 
 def now():
@@ -98,7 +99,8 @@ class EvidenceStore:
             if not self.check(connection):
                 raise EraseProofError("Audit integrity failed; certification is blocked.")
             row = connection.execute("SELECT hash FROM events ORDER BY sequence DESC LIMIT 1").fetchone()
-            payload = {**payload, "previous_audit_hash": row[0] if row else "0"*64}
+            payload = {**payload, "software": {"name": "EraseProof", "version": __version__},
+                       "previous_audit_hash": row[0] if row else "0"*64}
             record = self.sign(payload)
             connection.execute("INSERT INTO certificates VALUES(?,?)", (payload["id"], canonical(record).decode()))
             self._append(connection, "erasure.verified", {"certificate_id": payload["id"], "payload_sha256": record["payload_sha256"]})

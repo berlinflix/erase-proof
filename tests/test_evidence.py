@@ -21,6 +21,8 @@ def record_case(tmp_path):
 
 def test_expected_signer_detects_valid_record_from_another_operator(tmp_path):
     store, record = record_case(tmp_path)
+    from eraseproof import __version__
+    assert record["payload"]["software"] == {"name": "EraseProof", "version": __version__}
     assert verify_record(record, record["signer_fingerprint"])
     substitute = EvidenceStore(tmp_path/"other-operator").sign(record["payload"])
     assert verify_record(substitute)

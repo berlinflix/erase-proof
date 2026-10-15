@@ -118,4 +118,3 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 
 Tests exercise real FAT32 creation/deletion, TSK recovery with byte-for-byte SHA comparisons, native carving, overwrite/read-back, cancellation, signature tampering, audit tampering, virtual-disk safety guards and the native Qt background-job workflow. Source: [Sleuth Kit fls](https://www.sleuthkit.org/sleuthkit/man/fls.html), [icat](https://www.sleuthkit.org/sleuthkit/man/icat.html), [Qt for Python](https://doc.qt.io/qtforpython-6/).
 
-`prototype-web/` preserves the earlier browser prototype for reference. It is not the main application.
