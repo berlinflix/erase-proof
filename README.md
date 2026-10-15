@@ -1,62 +1,88 @@
-# EraseProof
+# EraseProof — native Ubuntu software
 
-A polished, working first implementation of the EraseProof proposal: a browser-local disk-image workbench built around **Discover → Plan → Erase → Attack → Certify**.
+EraseProof is a **local Linux tool**, with a native Qt desktop application, a CLI, real filesystem recovery, its own binary signature carver, direct file/device I/O, and signed verification evidence. It does not need a browser or web server.
 
-## Run
+Target: **Ubuntu x86-64 in Oracle VirtualBox**. Development and automated testing use Ubuntu 22.04 under WSL2. Ubuntu 22.04/24.04 desktop can run the source distribution; the Linux binary is built on Ubuntu 22.04. A VirtualBox hardware/device acceptance run is still required on your VM.
 
-Requires Node.js 20 or later. No package installation or build step is needed.
+## Run the source distribution in Ubuntu
 
-```sh
-npm run dev
-# Open http://127.0.0.1:4173
-npm test
+Copy/extract the project into your Ubuntu home directory, open a terminal there, and run:
+
+```bash
+bash scripts/setup-ubuntu.sh
+bash scripts/launch-ubuntu.sh
 ```
 
-The hosted version uses the same `dist/` files. Hosting identity lives in `.openai/hosting.json`.
+Setup installs the real Ubuntu forensic/demo tools and creates an isolated Python environment. It adds an EraseProof entry to Ubuntu's application menu. Launch the desktop as your ordinary user for the image experiment.
 
-## Implemented
+The standalone Linux distribution, when supplied in `artifacts/`, contains a compiled launcher plus bundled Python/Qt libraries. Its README explains the remaining Ubuntu system-tool dependencies.
 
-- Three real 8/4/2 MiB fixture images with known PDFs, PNGs, older copies, filenames and block fingerprints.
-- Raw image import, inspection, SHA-256 hashing and download. Maximum 128 MiB per image, 256 MiB per workspace.
-- Contiguous PNG/PDF/JPEG/ZIP carving with downloadable candidates and an exportable manifest. PNG chunk CRCs are checked; other format scores reflect boundary checks, not complete semantic validation.
-- Complete zero overwrite of the selected workspace image, followed by complete byte read-back, signature carving, known 4 KiB block search and known filename search.
-- Separate read-only image verification.
-- Fixture RRS calculated from unique known block fingerprints and known filenames. Imported images explicitly show RRS as unavailable because they have no ground-truth reference set.
-- ECDSA P-256 / SHA-256 self-signed JSON records with offline signature verification in the app and printable evidence.
-- SHA-256 hash-chained audit events and audit export.
-- IndexedDB persistence. Image replacement, record creation and audit append commit in one transaction. Conflicting history updates from other tabs fail rather than silently overwrite the audit chain.
-- Web Worker processing, cancellation, confirmation before workspace-image replacement, keyboard-accessible dialogs, reduced-motion support, and responsive layouts.
+## The demonstration
 
-## Scope of the evidence
+1. **Experiment → Create FAT32 experiment.** `mkfs.fat` formats an actual 64 MiB image. `mcopy` puts a viewable PNG, a valid PDF, a ZIP and text into it. Their original SHA-256 values are recorded.
+2. **Delete files normally.** `mdel` changes the real FAT32 directory entries and allocation table. It does not call EraseProof's overwriter or save an undo copy inside the image.
+3. **Recover files → Scan & recover.** The Sleuth Kit's `fls`/`icat` recover deleted metadata entries. EraseProof's own carver independently scans PNG/PDF/JPEG/ZIP signatures. Extracted files are real local files; open them and compare their hashes with the originals. Metadata and carved copies are deliberately separate findings.
+4. **Erase & verify.** Choose the experiment image and type its exact filename in the confirmation dialog. The engine overwrites the actual image, flushes it with `fsync`, reads every logical byte back, scans for carving signatures and known reference residues, and issues an Ed25519 record only if all checks pass.
+5. Run recovery again. Supported signature candidates should be absent. Since the filesystem itself has been overwritten, filesystem parsing fails; this is reported explicitly, rather than counted as an independent clean forensic verdict.
+6. **Evidence.** Inspect/export the signed record and audit chain. Modified records fail signature validation.
 
-This version operates on the bytes of a **workspace image**. It does not access or sanitize physical devices, modify an imported original, parse filesystems, invoke PhotoRec/Sleuth Kit, run privileged Linux commands, or remove snapshots, browser storage remnants or flash/FTL residue. Zero image read-back does not prove physical-device erasure.
+The original sample files remain outside the experiment image as **ground truth**, so the recovery hashes can be checked. Erasing the experiment does not erase these intentional originals or previously extracted evidence.
 
-Records are self-signed using a browser-generated non-exportable private key, persisted locally. The embedded public key proves record integrity, not operator identity or an external trust anchor. No NIST/IEEE compliance is claimed. Keep an external audit export to detect replacement/deletion of the entire local history.
+## CLI
 
-RRS = `(matched unique known blocks + matched known filenames) / (unique known blocks + known filenames)`. The fingerprint search is aligned to 4 KiB boundaries. A zero score is bounded by that known reference set. Complete zero read-back remains an additional, mandatory gate for every certificate.
-
-Images, keys, records and scan results are stored locally in IndexedDB. No image bytes are uploaded. Clearing site/browser data removes the workspace. Google Fonts requests contain no image data; system fonts work as fallback.
-
-## Structure
-
-```text
-dist/
-  index.html       application shell
-  styles.css       responsive visual system
-  app.js           views, operations, dialogs and downloads
-  core.js          fixtures, carving, fingerprints and verification
-  worker.js        bounded image operations off the main thread
-  integrity.js     record signing/verification and audit verification
-  storage.js       transactional IndexedDB persistence
-tests/
-  engine.test.js   positive, negative, residue and tamper tests
-server.mjs         dependency-free localhost preview
+```bash
+source .venv/bin/activate
+eraseproof doctor
+eraseproof demo create ~/EraseProof/demo-01
+eraseproof demo delete ~/EraseProof/demo-01
+eraseproof recover ~/EraseProof/demo-01/experiment.img --output ~/EraseProof/recovered-01
+eraseproof verify ~/EraseProof/demo-01/experiment.img --references ~/EraseProof/demo-01/manifest.json
+eraseproof plan ~/EraseProof/demo-01/experiment.img
+eraseproof erase ~/EraseProof/demo-01/experiment.img \
+  --confirm experiment.img \
+  --references ~/EraseProof/demo-01/manifest.json \
+  --case ~/EraseProof/evidence-01
+eraseproof audit ~/EraseProof/evidence-01
 ```
 
-## Next implementation boundary
+CLI results are JSON; progress goes to stderr. Verification uses exit code 2 for detected residue. Normal operational errors use 1. A standalone executable exposes the same CLI as `./EraseProof --cli ...`.
 
-The proposal’s physical-media workflow needs a separately authenticated Linux agent, a narrowly scoped privileged execution boundary, system-disk exclusion, device identity confirmation, persistent job recovery and independent forensic-tool results. Media probing, filesystem residue cleanup, ATA/NVMe sanitization, Ed25519 operator identities and independent-tool attestations are future work, not hidden behind simulated dashboard states.
+## Actual secondary virtual disks
 
-## Validation
+The core also contains a gated logical-overwrite path for a **recognized, unmounted secondary virtual disk**. It refuses mounted disks/children, read-only disks, partitions, missing serials, and unrecognized physical-drive models. It checks target identity, locks the opened target and requires both the allowlisted path and exact serial.
 
-`npm test` covers valid/decodeable fixtures, initial recoverability, complete erasure, deliberately skipped metadata cleanup, relocated known blocks, unknown-image scores, one-byte residue, malformed/truncated carving inputs, signature tampering and audit-chain changes. Browser QA additionally covers recovery downloads, record export/reimport, post-wipe scanning, persistence after reload, imports and responsive navigation.
+```bash
+eraseproof devices
+# Only after identifying a DISPOSABLE, UNMOUNTED secondary virtual disk:
+sudo .venv/bin/eraseproof plan /dev/sdb --allow-device /dev/sdb --confirm EXACT_SERIAL
+sudo .venv/bin/eraseproof erase /dev/sdb --allow-device /dev/sdb \
+  --confirm EXACT_SERIAL --case /home/YOUR_USER/EraseProof/virtual-disk-evidence
+```
+
+Device names are examples, not instructions to choose `/dev/sdb` blindly. Device writes have policy tests; an actual VirtualBox secondary-disk overwrite has not been run in this environment. Use the default filesystem-image demonstration until that acceptance test is completed. The desktop runs unprivileged and does not silently escalate permissions.
+
+## Assurance and remaining work
+
+This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
+
+ATA/NVMe sanitize, hidden HPA/DCO handling, journal-aware targeted file/folder scrubbing, fragmented carving, a bootable live USB, operator trust infrastructure, QR/PDF certificates and compliance mapping remain implementation milestones. There is no claim that this prototype securely deletes all copies of a host file or fulfills NIST/IEEE sanitization requirements.
+
+Metadata recovery uses the real Sleuth Kit; the native contiguous carver is implemented in `carve.py`. Carving confidence is a heuristic: PNG boundaries/CRCs and ZIP extraction CRCs are checked, while PDF/JPEG validation currently checks boundaries. Candidate size is bounded to 256 MiB. The engine scans larger sources in chunks and does not load entire drives into RAM.
+
+RRS is only available with a provided reference set: `(matched known block hashes + matched metadata patterns) / total known references`. The FAT32 experiment fingerprints aligned 512-byte content sectors and deleted-name residues. Unknown inputs show RRS as unavailable; every certificate still requires complete zero read-back.
+
+Ed25519 records use a local operator key saved with user-only permissions on Linux filesystems. The key is self-signed; it proves record integrity, not independent operator identity. SQLite commits signed records and their audit event together. Keep an external audit export or trusted head to detect replacement/truncation of the entire local history.
+
+Cancellation of a real overwrite is **not reversible**: the target may be partially overwritten. Such a job is logged as incomplete and never certified. Recovery output must be separate from a raw source disk; exclusive output creation prevents overwriting existing extracted files.
+
+## Development
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[desktop,test]'
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
+```
+
+Tests exercise real FAT32 creation/deletion, TSK recovery with byte-for-byte SHA comparisons, native carving, overwrite/read-back, cancellation, signature tampering, audit tampering, virtual-disk safety guards and the native Qt background-job workflow. Source: [Sleuth Kit fls](https://www.sleuthkit.org/sleuthkit/man/fls.html), [icat](https://www.sleuthkit.org/sleuthkit/man/icat.html), [Qt for Python](https://doc.qt.io/qtforpython-6/).
+
+`prototype-web/` preserves the earlier browser prototype for reference. It is not the main application.

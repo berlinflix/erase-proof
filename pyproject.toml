@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eraseproof"
+version = "0.2.0"
+description = "Native Linux recovery and recovery-verified erasure workbench"
+requires-python = ">=3.10"
+dependencies = ["cryptography>=3.4"]
+
+[project.optional-dependencies]
+desktop = ["PySide6-Essentials==6.8.3"]
+test = ["pytest>=7"]
+
+[project.scripts]
+eraseproof = "eraseproof.cli:main"
+eraseproof-desktop = "eraseproof.desktop:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+eraseproof = ["resources/*.svg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
