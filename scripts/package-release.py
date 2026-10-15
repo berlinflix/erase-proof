@@ -3,18 +3,41 @@ import hashlib
 from pathlib import Path
 import tarfile
 import zipfile
+import importlib.metadata
+import shutil
 
 root = Path(__file__).resolve().parent.parent
 output = root/"artifacts"
 output.mkdir(exist_ok=True)
-version = "0.2.0"
+import sys
+sys.path.insert(0, str(root/"src"))
+from eraseproof import __version__ as version
 binary = root/"dist"/"EraseProof"
 if not (binary/"EraseProof").exists():
     raise SystemExit("Build the Linux executable first.")
 
+for name in ("cryptography", "Pillow", "pypdf", "reportlab", "qrcode", "PySide6-Essentials", "shiboken6", "cffi", "pyinstaller", "typing_extensions", "charset-normalizer", "pycparser"):
+    distribution = importlib.metadata.distribution(name)
+    for entry in distribution.files or []:
+        if any(token in str(entry).lower() for token in ("license", "copying", "notice")):
+            original = Path(distribution.locate_file(entry))
+            if original.is_file():
+                destination = binary/"THIRD-PARTY-LICENSES"/name/Path(entry).name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(original, destination)
+python_license = Path("/usr/share/doc/python3.10/copyright")
+if python_license.is_file():
+    destination = binary/"THIRD-PARTY-LICENSES"/"Python"
+    destination.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(python_license, destination/"copyright")
+shutil.copytree(root/"docs"/"licenses", binary/"THIRD-PARTY-LICENSES"/"Qt-and-PySide", dirs_exist_ok=True)
+versions = [f"{distribution.metadata['Name']}=={distribution.version}" for distribution in importlib.metadata.distributions()
+            if distribution.metadata.get("Name") != "eraseproof"]
+(binary/"BUILD-PACKAGES.txt").write_text("\n".join(sorted(set(versions)))+"\n")
+
 (binary/"install-runtime.sh").write_bytes((root/"scripts"/"install-binary-runtime.sh").read_bytes())
 (binary/"install-runtime.sh").chmod(0o755)
-(binary/"README-FIRST.txt").write_text("""EraseProof 0.2.0 — NATIVE UBUNTU APPLICATION
+(binary/"README-FIRST.txt").write_text("""EraseProof — NATIVE UBUNTU APPLICATION
 
 This is a Linux x86-64 program, built on Ubuntu 22.04 under WSL.
 It has a native Qt desktop interface and needs no browser or web server.
@@ -23,7 +46,7 @@ IN YOUR UBUNTU VIRTUALBOX VM:
 1. Extract this archive into your Ubuntu home directory.
 2. In a terminal inside the extracted EraseProof folder, run:
      bash install-runtime.sh
-   This installs dosfstools, mtools, Sleuth Kit and Linux Qt runtime libraries.
+   This installs real forensic/demo tools, capability tools and Qt runtime libraries.
    The bundled program includes Python and Qt; no pip setup is required.
 3. Run:
      ./EraseProof
@@ -41,8 +64,14 @@ CLI:
 
 Scope: actual image writes and guest-visible logical overwrite only.
 The default demo needs no root and never targets the system disk.
-Physical SSD/ATA/NVMe sanitization, filesystem-aware targeted file/folder
-scrubbing, snapshots and hidden media areas are NOT implemented.
+Includes targeted logical file/folder erasure, offline FAT32 path cleanup,
+expanded validated carving, PhotoRec/TSK attack reports, partition discovery,
+signed JSON/PDF/QR reports, trusted signer checks and audit checkpoints.
+NVMe command submission is a separate guarded privileged CLI adapter, with
+audited receipts rather than physical-erasure certificates. LUKS2 image
+keyslot removal is supported. See source docs/MEDIA.md and docs/EVIDENCE.md.
+ATA destructive commands, ext4/NTFS journal cleanup, snapshots and physical
+flash-remanence assurance are outside this release's verified scope.
 Secondary virtual-disk writes are gated by a path/serial policy and require
 separate VirtualBox acceptance testing. Begin with the image experiment.
 
@@ -52,6 +81,7 @@ VirtualBox has not been operated by the developer in this session.
 
 Keep the whole EraseProof folder together; the _internal directory is needed.
 """)
+shutil.copytree(root/"docs", binary/"docs", dirs_exist_ok=True)
 
 archive = output/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz"
 with tarfile.open(archive, "w:gz") as file:
@@ -66,7 +96,10 @@ with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as file:
         file.write(path, arcname=str(Path(f"EraseProof-source-{version}")/path.relative_to(root)))
 
 checksums = []
-for path in (archive, source):
+release_files = [archive, source]
+for path in sorted(output.glob(f"EraseProof-Live-*-{version}.iso")):
+    release_files.append(path)
+for path in release_files:
     digest = hashlib.sha256()
     with path.open("rb") as file:
         for block in iter(lambda: file.read(4*1024*1024), b""):

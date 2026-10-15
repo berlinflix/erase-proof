@@ -8,8 +8,11 @@ Qt desktop / CLI
       +-- target discovery and plan policy (lsblk + stat + device identity)
       |
       +-- native recovery
-      |     +-- chunked binary signature carver (PNG / PDF / JPEG / ZIP)
+      |     +-- chunked binary carver (16 container families, ZIP/Office identification)
+      |     +-- bounded PNG chunk-gap reconstruction
+      |     +-- isolated decoding / strict PDF / ZIP CRC / SQLite validators
       |     +-- independent filesystem adapter (fls / icat)
+      |     +-- PhotoRec attack reports and MBR/GPT partition offsets
       |
       +-- overwrite engine
       |     +-- pinned file descriptor, exclusive file lock
@@ -18,10 +21,21 @@ Qt desktop / CLI
       |     +-- complete byte read-back and reference search
       |     +-- recovery attack using the native carver
       |
+      +-- targeted operations
+      |     +-- pinned logical file/folder overwrite and unlink
+      |     +-- offline FAT32 chains, metadata and known free-space copies
+      |
+      +-- media operations
+      |     +-- read-only NVMe/ATA/HPA/DCO discovery
+      |     +-- all-namespace guarded NVMe submission, audited receipts
+      |     +-- real software LUKS2 image keyslot removal
+      |
       +-- evidence
             +-- Ed25519 local operator key
             +-- signed target / plan / before hash / after hash / measurements
             +-- SQLite certificate + audit append transaction
+            +-- expected signer checks and external signed audit checkpoints
+            +-- PDF/QR summary with attached authoritative signed JSON
 ```
 
 The native application runs Qt widgets directly. There is no web view, web server, hosted backend or remote data path. The GUI performs long-running engine operations in a background QThread and passes progress/results back through Qt signals. The CLI invokes the same engine.
@@ -36,15 +50,15 @@ The native application runs Qt widgets directly. There is no web view, web serve
 
 ## What is measured
 
-The reference score counts matched unique aligned block hashes and matched metadata byte patterns against a provided baseline. It is not a measure of all possible recoverability. A missing baseline yields an unavailable score. Full zero read-back is an additional certificate requirement, even when reference score is zero.
+The reference score counts matched unique aligned block hashes and matched metadata byte patterns against a provided baseline. It does not measure all possible recoverability. A missing baseline yields an unavailable score. Whole-image records require full zero read-back; targeted operations state exactly which logical bytes/allocation metadata were checked.
 
-The native carver scans all logical bytes in 4 MiB chunks. Candidate parsing is bounded to 256 MiB per file. PNG chunk CRCs are checked; ZIP members are CRC-checked after extraction. PDF/JPEG confidence currently reflects contiguous boundary evidence, not full semantic decoding or probability of correctness. The Sleuth Kit adapter supplies actual metadata-based deleted-file recovery independently of the carver.
+The carver scans in 4 MiB chunks, with a 256 MiB candidate limit. Recovered images, PDFs, archives and SQLite databases receive resource-bounded format validation in separate processes. Other containers expose their structural checks. Confidence remains a heuristic. Sleuth Kit and PhotoRec adapters preserve their own outputs and failures; an unrecognized filesystem is not a clean forensic verdict.
 
 ## Delivered versus research milestones
 
-Delivered: native GUI/CLI, real FAT32 creation and ordinary deletion, byte-matching recovery, a custom contiguous carver, actual image overwrite, complete read-back, reference search, signed audit evidence, read-only Linux discovery, and a guarded secondary-virtual-disk logical-overwrite path.
+The software milestones and exact validation state are tracked in [MILESTONES.md](MILESTONES.md). Device command scope is in [MEDIA.md](MEDIA.md); signer trust, PDF verification and truncation detection are in [EVIDENCE.md](EVIDENCE.md).
 
-Still to implement and independently evaluate: targeted ext4/NTFS/FAT residue scrubbing, filesystem history/journals/snapshots, fragmentation reconstruction, media-aware ATA/NVMe firmware sanitization, HPA/DCO checks, a privileged broker with a smaller native/C I/O component, bootable live-USB packaging, trusted operator identities, PDF/QR verification, and measured comparisons with PhotoRec and other independent tools.
+Research work still requires implementation/evaluation for ext4/NTFS/exFAT targeted history cleanup, arbitrary fragmentation, ATA destructive commands, HPA/DCO changes, a smaller privileged broker/C component, unknown snapshots/copies, public operator trust infrastructure and physical-media sanitization assurance. No mounted filesystem is scrubbed through guessed raw extents or blind journal edits.
 
 The default image experiment and GUI flow are tested in WSL Ubuntu. VirtualBox guest device I/O and physical media need separate acceptance tests; a VM result must not be presented as host SSD sanitization.
 

@@ -13,6 +13,7 @@ from .carve import checkpoint
 from .evidence import EvidenceStore, now
 from .models import EraseProofError
 from .targets import describe, open_target
+from .runtime import system_environment
 
 
 class Fat32:
@@ -156,7 +157,7 @@ def _check_image(path):
     target = describe(path)
     if target["kind"] != "image" or Path(path).suffix.lower() not in (".img", ".raw", ".dd", ".bin"):
         raise EraseProofError("Targeted FAT32 writes are restricted to regular volume-image files.")
-    result = __import__("subprocess").run(["losetup", "--associated", target["path"]], capture_output=True, text=True, timeout=15)
+    result = __import__("subprocess").run(["losetup", "--associated", target["path"]], capture_output=True, text=True, timeout=15, env=system_environment())
     if result.returncode or result.stdout.strip():
         raise EraseProofError("Image is attached to a loop device or attachment checks failed. Detach it before offline editing.")
     return target

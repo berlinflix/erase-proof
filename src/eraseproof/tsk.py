@@ -7,6 +7,7 @@ import shutil
 import subprocess
 
 from .models import Candidate, EraseProofError
+from .runtime import system_environment
 
 
 def available():
@@ -20,7 +21,7 @@ def deleted(path, sector_offset=0):
     if sector_offset < 0:
         raise EraseProofError("Sector offset cannot be negative.")
     try:
-        result = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=120)
+        result = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=120, env=system_environment())
     except subprocess.TimeoutExpired:
         raise EraseProofError("fls exceeded its 120-second time limit.") from None
     if result.returncode:
@@ -46,7 +47,7 @@ def recover(path, candidate, output_dir, sector_offset=0):
     with destination.open("xb") as output:
         try:
             result = subprocess.run(["icat", "-r", "-o", str(sector_offset), str(Path(path).resolve()), candidate.inode],
-                                    stdout=output, stderr=subprocess.PIPE, timeout=180)
+                                    stdout=output, stderr=subprocess.PIPE, timeout=180, env=system_environment())
         except subprocess.TimeoutExpired:
             output.close()
             destination.unlink(missing_ok=True)

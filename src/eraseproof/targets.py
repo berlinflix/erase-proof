@@ -8,6 +8,7 @@ import struct
 import subprocess
 
 from .models import EraseProofError
+from .runtime import system_environment
 
 VIRTUAL_MODELS = ("vbox", "virtual disk", "vmware", "qemu", "virtio")
 
@@ -18,7 +19,7 @@ def devices() -> list[dict]:
     result = subprocess.run(
         ["lsblk", "--json", "--bytes", "--paths", "--output",
          "NAME,TYPE,SIZE,MODEL,SERIAL,ROTA,RO,MOUNTPOINTS,TRAN"],
-        capture_output=True, text=True, check=False, timeout=15,
+        capture_output=True, text=True, check=False, timeout=15, env=system_environment(),
     )
     if result.returncode:
         raise EraseProofError(result.stderr.strip() or "lsblk failed")

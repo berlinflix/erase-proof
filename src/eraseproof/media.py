@@ -15,6 +15,7 @@ import uuid
 
 from .evidence import EvidenceStore, digest, now
 from .models import EraseProofError
+from .runtime import system_environment
 from .targets import describe, devices, descendants, find_device, open_target
 
 
@@ -23,7 +24,7 @@ def command(arguments, json_output=False, pass_fds=()):
         raise EraseProofError(f"Install the Linux tool '{arguments[0]}' for this operation.")
     try:
         result = subprocess.run(arguments, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                                timeout=30, pass_fds=pass_fds, env={**os.environ, "LC_ALL": "C"})
+                                timeout=30, pass_fds=pass_fds, env=system_environment())
     except subprocess.TimeoutExpired:
         raise EraseProofError(f"{arguments[0]} timed out. A submitted firmware operation may continue; inspect its status before retrying.") from None
     if result.returncode:

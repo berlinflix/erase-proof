@@ -181,7 +181,7 @@ class MainWindow(QMainWindow):
         side.addStretch()
         side.addWidget(label("LOCAL ENGINE · v"+__version__, "sideCaption"))
         side.addSpacing(8)
-        side.addWidget(label("Real Linux I/O.\nYour data stays on this machine.\n\nImage and virtual-disk support.\nPhysical-media sanitization\nis a separate milestone.", "sideNote"))
+        side.addWidget(label("Real Linux I/O.\nYour data stays on this machine.\n\nImage and virtual-disk support.\nHardware assurance requires\nseparate media evaluation.", "sideNote"))
         outer.addWidget(sidebar)
 
         main = QVBoxLayout()

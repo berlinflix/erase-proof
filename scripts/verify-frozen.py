@@ -29,9 +29,23 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     result = run("erase", manifest["image"], "--confirm", "experiment.img", "--references", root/"experiment"/"manifest.json", "--case", root/"evidence")
     assert result["record"]["payload"]["verification"]["rrs"] == 0
     assert run("record", result["certificate"])["signature_valid"]
+    fingerprint = result["record"]["signer_fingerprint"]
+    assert run("record", result["certificate"], "--trusted-fingerprint", fingerprint)["trusted_signer"]
+    pdf = run("pdf", result["certificate"], "--output", root/"report.pdf")
+    assert pdf["pages"] == 2
+    assert run("pdf-record", root/"report.pdf", "--trusted-fingerprint", fingerprint)["trusted_signer"]
+    run("audit-export", root/"evidence", "--output", root/"checkpoint.json")
+    assert run("audit", root/"evidence", "--anchor", root/"checkpoint.json", "--trusted-fingerprint", fingerprint)["anchor_matches"]
     assert run("audit", root/"evidence")["intact"]
     after = run("recover", manifest["image"], "--mode", "carve", "--output", root/"after")
     assert after["candidates"] == []
+    independent = run("attack", manifest["image"], "--output", root/"independent-after")
+    assert independent["recovered_files"] == 0
+    assert next(t for t in independent["tools"] if t["tool"] == "PhotoRec")["status"] == "completed"
+    logical = root/"logical.txt"
+    logical.write_text("Native executable targeted erasure fixture")
+    assert run("erase-files", logical, "--confirm", logical.name, "--case", root/"evidence")["payload"]["verification"]["passed"]
+    assert not logical.exists()
     environment = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "HOME": str(root/"home")}
     (root/"home").mkdir()
     gui = subprocess.Popen([binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
@@ -40,4 +54,5 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
         raise RuntimeError("Frozen Qt launch failed: "+gui.stderr.read().decode(errors="replace"))
     gui.terminate()
     gui.wait(timeout=10)
-    print(json.dumps({"binary": binary, "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_valid": True, "audit_intact": True, "native_qt_process_startup": "passed"}, indent=2))
+    assert all(c["confidence"] >= 98 for c in recovery["candidates"] if c["method"] != "sleuthkit-metadata")
+    print(json.dumps({"binary": binary, "version": doctor["version"], "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_and_expected_signer_valid": True, "pdf_attachment_valid": True, "anchored_audit_intact": True, "independent_photorec_after_files": 0, "targeted_file_erasure": "passed", "native_qt_process_startup": "passed"}, indent=2))

@@ -11,6 +11,7 @@ from . import tsk
 from .carve import checkpoint
 from .targets import describe
 from .models import EraseProofError
+from .runtime import system_environment
 
 
 def attack(path, output_dir, sector_offset=0, progress=None, cancel=None, timeout=180):
@@ -32,7 +33,7 @@ def attack(path, output_dir, sector_offset=0, progress=None, cancel=None, timeou
         started = time.monotonic()
         try:
             result = subprocess.run(command, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout,
-                                    env={**os.environ, "TERM": "dumb"})
+                                    env={**system_environment(), "TERM": "dumb"})
             (root/"photorec.stdout.log").write_bytes(result.stdout)
             (root/"photorec.stderr.log").write_bytes(result.stderr)
             files = [p for directory in root.glob("photorec.*") if directory.is_dir() for p in directory.rglob("*") if p.is_file() and p.name != "report.xml"]

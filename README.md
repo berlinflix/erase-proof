@@ -21,10 +21,10 @@ The standalone Linux distribution, when supplied in `artifacts/`, contains a com
 
 1. **Experiment → Create FAT32 experiment.** `mkfs.fat` formats an actual 64 MiB image. `mcopy` puts a viewable PNG, a valid PDF, a ZIP and text into it. Their original SHA-256 values are recorded.
 2. **Delete files normally.** `mdel` changes the real FAT32 directory entries and allocation table. It does not call EraseProof's overwriter or save an undo copy inside the image.
-3. **Recover files → Scan & recover.** The Sleuth Kit's `fls`/`icat` recover deleted metadata entries. EraseProof's own carver independently scans PNG/PDF/JPEG/ZIP signatures. Extracted files are real local files; open them and compare their hashes with the originals. Metadata and carved copies are deliberately separate findings.
+3. **Recover files → Scan & recover.** The Sleuth Kit's `fls`/`icat` recover deleted metadata entries. EraseProof's own carver independently scans supported signatures and validates extracted formats. Open the actual recovered files and compare hashes with the originals. Metadata and carved copies are deliberately separate findings.
 4. **Erase & verify.** Choose the experiment image and type its exact filename in the confirmation dialog. The engine overwrites the actual image, flushes it with `fsync`, reads every logical byte back, scans for carving signatures and known reference residues, and issues an Ed25519 record only if all checks pass.
 5. Run recovery again. Supported signature candidates should be absent. Since the filesystem itself has been overwritten, filesystem parsing fails; this is reported explicitly, rather than counted as an independent clean forensic verdict.
-6. **Evidence.** Inspect/export the signed record and audit chain. Modified records fail signature validation.
+6. **Evidence.** Inspect/export signed JSON, PDF/QR reports and an anchored audit export. Modified signed payloads fail validation. Expected signer fingerprints establish which operator key you trust.
 
 The original sample files remain outside the experiment image as **ground truth**, so the recovery hashes can be checked. Erasing the experiment does not erase these intentional originals or previously extracted evidence.
 
@@ -98,13 +98,13 @@ The **Media methods** page and CLI inspect native NVMe/ATA capabilities and soft
 
 This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
 
-ATA/NVMe sanitize, hidden HPA/DCO handling, journal-aware targeted file/folder scrubbing, fragmented carving, a bootable live USB, operator trust infrastructure, QR/PDF certificates and compliance mapping remain implementation milestones. There is no claim that this prototype securely deletes all copies of a host file or fulfills NIST/IEEE sanitization requirements.
+Open research work includes ext4/NTFS/exFAT targeted journal/history cleanup, ATA destructive adapters, HPA/DCO changes, arbitrary fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
 
-Metadata recovery uses the real Sleuth Kit; the native contiguous carver is implemented in `carve.py`. Carving confidence is a heuristic: PNG boundaries/CRCs and ZIP extraction CRCs are checked, while PDF/JPEG validation currently checks boundaries. Candidate size is bounded to 256 MiB. The engine scans larger sources in chunks and does not load entire drives into RAM.
+Metadata recovery uses the real Sleuth Kit. The carver streams large sources in chunks; candidates are bounded to 256 MiB. PNG/ZIP checksums, bounded image decoding and strict PDF parsing provide format-specific evidence. Container-only checks are labelled. Confidence is a heuristic; it is not a probability or proof of semantic correctness.
 
-RRS is only available with a provided reference set: `(matched known block hashes + matched metadata patterns) / total known references`. The FAT32 experiment fingerprints aligned 512-byte content sectors and deleted-name residues. Unknown inputs show RRS as unavailable; every certificate still requires complete zero read-back.
+RRS is available only with reference evidence: `(matched known block hashes + matched metadata patterns) / total known references`. The FAT32 experiment fingerprints aligned 512-byte sectors and deleted-name residues. Unknown inputs show RRS as unavailable. Whole-image certificates require complete zero read-back. File/folder and FAT32 records state their narrower byte/allocation scope explicitly.
 
-Ed25519 records use a local operator key saved with user-only permissions on Linux filesystems. The key is self-signed; it proves record integrity, not independent operator identity. SQLite commits signed records and their audit event together. Keep an external audit export or trusted head to detect replacement/truncation of the entire local history.
+Ed25519 keys require private Linux file permissions. SQLite commits signed records and their audit event together. Trusted fingerprint checks, signed checkpoints and the PDF's authoritative JSON attachment are explained in [evidence verification](docs/EVIDENCE.md). Preserve checkpoints independently to detect local history truncation.
 
 Cancellation of a real overwrite is **not reversible**: the target may be partially overwritten. Such a job is logged as incomplete and never certified. Recovery output must be separate from a raw source disk; exclusive output creation prevents overwriting existing extracted files.
 

@@ -10,6 +10,7 @@ import zipfile
 import zlib
 
 from .models import EraseProofError
+from .runtime import system_environment
 
 
 def png():
@@ -44,7 +45,7 @@ def samples():
 
 
 def run_tool(args):
-    result = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    result = subprocess.run(args, capture_output=True, text=True, timeout=60, env=system_environment())
     if result.returncode:
         raise EraseProofError(result.stderr.strip() or result.stdout.strip() or f"{args[0]} failed")
     return result

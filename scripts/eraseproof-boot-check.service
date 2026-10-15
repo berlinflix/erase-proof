@@ -1,0 +1,15 @@
+[Unit]
+Description=EraseProof generated-image boot acceptance check
+After=local-fs.target
+ConditionKernelCommandLine=eraseproof.selftest=1
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/eraseproof-boot-check
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/ttyS0
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target
