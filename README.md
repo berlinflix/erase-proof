@@ -47,8 +47,6 @@ eraseproof audit ~/EraseProof/evidence-01
 
 CLI results are JSON; progress goes to stderr. Verification uses exit code 2 for detected residue. Normal operational errors use 1. A standalone executable exposes the same CLI as `./EraseProof --cli ...`.
 
-## Actual secondary virtual disks
-
 ## Targeted file and folder operations
 
 The native **Targeted erasure** page and CLI support two distinct operations:
@@ -65,6 +63,20 @@ eraseproof fat32-erase ~/EraseProof/demo-01/experiment.img /REPORT.PDF \
 ```
 
 FAT32 cleanup is bounded to known image allocation and reference evidence. It does not imply ext4/NTFS journal cleanup or physical flash sanitization.
+
+## Expanded forensic recovery
+
+The native carver recognizes PNG, PDF, JPEG, ZIP/Office, GIF, BMP, WAV/AVI, Ogg, MP4, SQLite, RTF, ELF, 7z, gzip and tar. Image decoding, strict PDF parsing, SQLite quick-check and ZIP CRC validation run in separate processes with CPU, memory and time limits. Other families report container-level checks; a score is an evidence heuristic, not a probability. Files are never executed. Candidates are limited to 256 MiB.
+
+`--fragmented-png` reconstructs one PNG gap at a chunk boundary within 64 KiB and checks all reconstructed CRCs. Arbitrary fragmentation remains outside this algorithm.
+
+```bash
+eraseproof partitions /path/to/disk.img
+eraseproof recover /path/to/disk.img --sector-offset 2048 --output ~/EraseProof/recovered
+eraseproof attack /path/to/disk.img --sector-offset 2048 --output ~/EraseProof/independent
+```
+
+The desktop offers partition discovery and offset selection. Primary MBR/GPT entries are checked for bounds and overlap; GPT header and entry-array CRCs are verified. Extended MBR partitions require manual offsets. Carving covers the whole source regardless of metadata offset. Independent reports preserve actual PhotoRec/Sleuth Kit results, extracted files, logs, missing tools, timeouts and parsing failures. An unrecognized wiped filesystem is incomplete metadata coverage.
 
 ## Actual secondary virtual disks
 

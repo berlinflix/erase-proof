@@ -284,10 +284,24 @@ class MainWindow(QMainWindow):
         destination.addWidget(self.registered("Choose folder…", self.choose_destination))
         settings.addLayout(destination)
         row = QHBoxLayout()
+        row.addWidget(label("Partition offset (512-byte sectors)"))
+        self.sector_offset = QLineEdit("0")
+        self.sector_offset.setMaximumWidth(145)
+        row.addWidget(self.sector_offset)
+        row.addWidget(self.registered("Detect partitions…", self.detect_partitions))
+        row.addStretch()
+        settings.addLayout(row)
+        row = QHBoxLayout()
         self.mode = QComboBox()
         self.mode.addItems(["Filesystem + signature carving", "Deleted filesystem entries only", "Signature carving only"])
         row.addWidget(self.mode, 1)
         row.addWidget(self.registered("Scan & recover", self.start_recovery, True))
+        settings.addLayout(row)
+        row = QHBoxLayout()
+        self.fragments = QCheckBox("PNG gap reconstruction (bounded to 64 KiB)")
+        row.addWidget(self.fragments)
+        row.addStretch()
+        row.addWidget(self.registered("Independent attack", self.start_independent_attack))
         settings.addLayout(row)
         layout.addWidget(options)
         findings, contents = panel("Recovered files", "Metadata findings and carved copies are listed separately. Open an extracted file to inspect the actual recovered content.")
@@ -541,7 +555,39 @@ class MainWindow(QMainWindow):
             fill_table(self.results, [(c["name"], "Filesystem" if c["method"] == "sleuthkit-metadata" else "Carving", c["length"], c["sha256"]) for c in self.recovered])
             self.status_label.setText(f"Recovery complete: {len(self.recovered)} findings saved to {output}" + (" · "+"; ".join(report["warnings"]) if report["warnings"] else ""))
             self.progress_bar.setValue(1000)
-        self.execute(lambda progress, cancel: recover(target, output, mode, progress=progress, cancel=cancel), done)
+        fragmented = self.fragments.isChecked()
+        try:
+            offset = int(self.sector_offset.text())
+        except ValueError:
+            return self.on_error("Partition offset must be a nonnegative integer.")
+        self.execute(lambda progress, cancel: recover(target, output, mode, offset, progress=progress, cancel=cancel, fragmented=fragmented), done)
+
+    def detect_partitions(self):
+        from .partitions import inspect
+        try:
+            report = inspect(self.recovery_source.text().strip())
+            options = ["Whole source / volume (offset 0)"]+[f"{p['name']} · start {p['tsk_offset']} · {p['sectors']:,} sectors" for p in report["partitions"]]
+            chosen, accepted = QInputDialog.getItem(self, "Select filesystem partition", "Detected "+report["table"]+". Choose metadata recovery offset:", options, 0, False)
+            if accepted:
+                index = options.index(chosen)
+                self.sector_offset.setText(str(report["partitions"][index-1]["tsk_offset"] if index else 0))
+                self.status_label.setText("Partition offset selected. Signature carving still covers the entire source.")
+        except Exception as error:
+            self.on_error(str(error))
+
+    def start_independent_attack(self):
+        from .independent import attack
+        target = self.recovery_source.text().strip()
+        output = Path(self.recovery_destination.text()).expanduser()/("attack-"+uuid.uuid4().hex[:8])
+        def done(report):
+            self.verification_details.setPlainText(json.dumps(report, indent=2))
+            self.status_label.setText(f"Independent attack: {report['recovered_files']} files extracted. Coverage {'complete' if report['complete'] else 'incomplete; see exact tool statuses'}. Report: {output/'attack.json'}")
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(output)))
+        try:
+            offset = int(self.sector_offset.text())
+        except ValueError:
+            return self.on_error("Partition offset must be a nonnegative integer.")
+        self.execute(lambda progress, cancel: attack(target, output, offset, progress=progress, cancel=cancel), done)
 
     def open_recovered(self, *_):
         row = self.results.currentRow()

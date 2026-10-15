@@ -5,14 +5,16 @@ from pathlib import Path
 import struct
 import zipfile
 import zlib
+import io
 
 from .models import Candidate, Cancelled, EraseProofError
 from .targets import describe, open_target
+from . import formats
 
 CHUNK = 4 * 1024 * 1024
 MAX_CANDIDATE = 256 * 1024 * 1024
 SIGNATURES = ((b"\x89PNG\r\n\x1a\n", "PNG"), (b"%PDF-", "PDF"),
-              (b"\xff\xd8\xff", "JPEG"), (b"PK\x03\x04", "ZIP"))
+              (b"\xff\xd8\xff", "JPEG"), (b"PK\x03\x04", "ZIP")) + formats.SIGNATURES
 
 
 def checkpoint(cancel):
@@ -21,6 +23,8 @@ def checkpoint(cancel):
 
 
 def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
+    if kind not in ("PNG", "PDF", "JPEG", "ZIP"):
+        return formats.identify(stream, offset, kind, total, max_candidate)
     limit = min(total, offset + max_candidate)
     stream.seek(offset)
     if kind == "PNG":
@@ -86,7 +90,42 @@ def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
     return None
 
 
-def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=None, length=None):
+def reassemble_png(stream, offset, total, maximum_gap=65536):
+    # One missing chunk-boundary gap, limited to 64 KiB; no unconstrained
+    # permutation search and no claim of arbitrary fragment reconstruction.
+    stream.seek(offset)
+    data = stream.read(min(total-offset, 8*1024*1024+maximum_gap))
+    if data[:8] != SIGNATURES[0][0]:
+        return None
+    pos, valid_chunks = 8, 0
+    while pos+12 <= len(data):
+        size = struct.unpack_from(">I", data, pos)[0]
+        if size > 8*1024*1024 or pos+12+size > len(data):
+            break
+        crc = zlib.crc32(data[pos+4:pos+8+size]) & 0xffffffff
+        if crc != struct.unpack_from(">I", data, pos+8+size)[0]:
+            break
+        if valid_chunks == 0 and data[pos+4:pos+8] != b"IHDR":
+            return None
+        if data[pos+4:pos+8] == b"IEND":
+            return None
+        valid_chunks += 1
+        pos += 12+size
+    if not valid_chunks:
+        return None
+    for suffix in range(pos+1, min(len(data)-12, pos+maximum_gap)+1):
+        if data[suffix+4:suffix+8] not in (b"IDAT", b"IEND", b"PLTE", b"tEXt", b"iTXt", b"zTXt", b"pHYs", b"gAMA", b"sRGB"):
+            continue
+        reconstructed = data[:pos]+data[suffix:]
+        result = identify(io.BytesIO(reconstructed), 0, "PNG", len(reconstructed), len(reconstructed))
+        if result and result.confidence == 99:
+            return Candidate(offset, result.length, "PNG", 98,
+                             ["One PNG chunk-boundary gap reconstructed", "All reconstructed chunk CRCs valid", f"Skipped {suffix-pos} bytes; search bounded to 64 KiB"],
+                             method="png-gap-reconstruction", segments=[[offset, pos], [offset+suffix, result.length-pos]])
+    return None
+
+
+def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=None, length=None, fragmented=False):
     owned = stream is None
     if owned:
         target = describe(path)
@@ -104,18 +143,23 @@ def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=N
             for signature, kind in SIGNATURES:
                 at = window.find(signature)
                 while at >= 0:
-                    hits.append((base+at, kind))
+                    candidate_offset = base+at-(4 if kind == "MP4" else 257 if kind == "TAR" else 0)
+                    if candidate_offset >= 0:
+                        hits.append((candidate_offset, kind))
                     at = window.find(signature, at+1)
             for at, kind in sorted(hits):
-                if at in seen or any(c.offset <= at < c.offset+c.length for c in candidates):
+                if at in seen or any(any(start <= at < start+size for start, size in c.segments or [[c.offset, c.length]]) for c in candidates):
                     continue
                 seen.add(at)
                 result = identify(stream, at, kind, length, max_candidate)
+                if fragmented and kind == "PNG" and (not result or result.confidence < 90):
+                    rebuilt = reassemble_png(stream, at, length)
+                    result = rebuilt or result
                 if result:
                     result.name = f"carved_{at:012x}.{kind.lower()}"
                     candidates.append(result)
             offset += len(data)
-            carry = window[-7:]
+            carry = window[-264:]
             if progress:
                 progress("Recover", offset/max(length, 1), f"Scanned {offset:,} / {length:,} bytes; {len(candidates)} candidates")
         return candidates
@@ -131,16 +175,18 @@ def extract(path, candidate, output_dir):
     destination = directory / name
     # Exclusive creation prevents overwriting any existing evidence or source.
     with open_target(path) as source, destination.open("xb") as output:
-        source.seek(candidate.offset)
-        remaining, digest = candidate.length, hashlib.sha256()
+        digest = hashlib.sha256()
         try:
-            while remaining:
-                data = source.read(min(CHUNK, remaining))
-                if not data:
-                    raise EraseProofError("Short read during extraction.")
-                output.write(data)
-                digest.update(data)
-                remaining -= len(data)
+            for offset, length in candidate.segments or [[candidate.offset, candidate.length]]:
+                source.seek(offset)
+                remaining = length
+                while remaining:
+                    data = source.read(min(CHUNK, remaining))
+                    if not data:
+                        raise EraseProofError("Short read during extraction.")
+                    output.write(data)
+                    digest.update(data)
+                    remaining -= len(data)
             output.flush()
             os.fsync(output.fileno())
         except BaseException:
@@ -151,9 +197,19 @@ def extract(path, candidate, output_dir):
     if candidate.file_type == "ZIP":
         try:
             with zipfile.ZipFile(destination) as archive:
-                valid = archive.testzip() is None
-            candidate.evidence.append("ZIP members and CRCs valid" if valid else "ZIP member CRC failed")
-            candidate.confidence = 98 if valid else 35
+                names = set(archive.namelist())
+            for prefix, family in (("word/", "DOCX"), ("xl/", "XLSX"), ("ppt/", "PPTX")):
+                if "[Content_Types].xml" in names and any(name.startswith(prefix) for name in names):
+                    candidate.file_type = family
+                    candidate.evidence.append("Office Open XML package identified: "+family)
+                    break
         except (zipfile.BadZipFile, RuntimeError, NotImplementedError):
             candidate.evidence.append("Archive validation failed or encryption unsupported")
+    from .validators import isolated
+    validation = isolated(destination, candidate.file_type)
+    candidate.evidence.append(validation["detail"])
+    if validation["status"] == "valid":
+        candidate.confidence = max(candidate.confidence, 98)
+    elif validation["status"] == "invalid":
+        candidate.confidence = min(candidate.confidence, 35)
     return candidate

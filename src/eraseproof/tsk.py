@@ -17,7 +17,12 @@ def deleted(path, sector_offset=0):
     if not available():
         raise EraseProofError("The Sleuth Kit is not installed. Install Ubuntu package 'sleuthkit'.")
     command = ["fls", "-d", "-r", "-p", "-F", "-o", str(sector_offset), str(Path(path).resolve())]
-    result = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=120)
+    if sector_offset < 0:
+        raise EraseProofError("Sector offset cannot be negative.")
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=120)
+    except subprocess.TimeoutExpired:
+        raise EraseProofError("fls exceeded its 120-second time limit.") from None
     if result.returncode:
         raise EraseProofError(result.stderr.strip() or "fls could not parse this filesystem.")
     candidates = []
@@ -39,8 +44,13 @@ def recover(path, candidate, output_dir, sector_offset=0):
     safe_name = re.sub(r"[^\w.() -]", "_", Path(candidate.name).name)[:180] or "recovered.bin"
     destination = root / f"inode_{candidate.inode}_{safe_name}"
     with destination.open("xb") as output:
-        result = subprocess.run(["icat", "-r", "-o", str(sector_offset), str(Path(path).resolve()), candidate.inode],
-                                stdout=output, stderr=subprocess.PIPE, timeout=180)
+        try:
+            result = subprocess.run(["icat", "-r", "-o", str(sector_offset), str(Path(path).resolve()), candidate.inode],
+                                    stdout=output, stderr=subprocess.PIPE, timeout=180)
+        except subprocess.TimeoutExpired:
+            output.close()
+            destination.unlink(missing_ok=True)
+            raise EraseProofError("icat exceeded its 180-second time limit; partial extraction removed.") from None
         output.flush()
         os.fsync(output.fileno())
     if result.returncode:

@@ -27,8 +27,10 @@ def references(path):
     return value.get("references", value)
 
 
-def recover(path, output, mode="both", sector_offset=0, progress=None, cancel=None):
+def recover(path, output, mode="both", sector_offset=0, progress=None, cancel=None, fragmented=False):
     target = describe(path)
+    if sector_offset < 0:
+        raise EraseProofError("Sector offset cannot be negative.")
     if target["kind"] == "block-device":
         # An output on the source device can overwrite the evidence being recovered.
         ancestor = Path(output).expanduser().resolve()
@@ -55,7 +57,7 @@ def recover(path, output, mode="both", sector_offset=0, progress=None, cancel=No
                 raise
             warnings.append(str(error))
     if mode in ("carve", "both"):
-        for candidate in carve.scan(path, progress=progress, cancel=cancel):
+        for candidate in carve.scan(path, progress=progress, cancel=cancel, fragmented=fragmented):
             carve.checkpoint(cancel)
             candidates.append(carve.extract(path, candidate, Path(output)/"carved"))
     report = {"source": describe(path), "mode": mode, "sector_offset": sector_offset,
@@ -85,6 +87,7 @@ def parser():
     rs.add_argument("--output", required=True)
     rs.add_argument("--mode", choices=["deleted", "carve", "both"], default="both")
     rs.add_argument("--sector-offset", type=int, default=0)
+    rs.add_argument("--fragmented-png", action="store_true", help="Attempt one PNG chunk-boundary gap reconstruction within 64 KiB")
     vs = sub.add_parser("verify", help="Full zero read-back and adversarial residue scan")
     vs.add_argument("target")
     vs.add_argument("--references")
@@ -116,6 +119,16 @@ def parser():
     fw.add_argument("internal_path")
     fw.add_argument("--confirm", required=True)
     fw.add_argument("--case", required=True)
+    worker = sub.add_parser("_validate", help=argparse.SUPPRESS)
+    worker.add_argument("path")
+    worker.add_argument("family")
+    attack = sub.add_parser("attack", help="Run independent PhotoRec and Sleuth Kit checks, preserving errors and extracted evidence")
+    attack.add_argument("target")
+    attack.add_argument("--output", required=True)
+    attack.add_argument("--sector-offset", type=int, default=0)
+    partitions = sub.add_parser("partitions", help="Read-only primary MBR/GPT discovery; validate GPT checksums and bounds")
+    partitions.add_argument("target")
+    partitions.add_argument("--sector-size", type=int, choices=[512, 4096], default=512)
     return result
 
 
@@ -139,7 +152,7 @@ def main(argv=None):
         elif args.command == "demo":
             output = demo.create(args.directory, args.deleted) if args.action == "create" else demo.delete(args.directory)
         elif args.command == "recover":
-            output = recover(args.target, args.output, args.mode, args.sector_offset, progress)
+            output = recover(args.target, args.output, args.mode, args.sector_offset, progress, fragmented=args.fragmented_png)
         elif args.command == "verify":
             output = verify(args.target, references(args.references), progress)
             status = 0 if output["passed"] else 2
@@ -167,6 +180,16 @@ def main(argv=None):
                 output = list(Fat32(stream, Path(args.image).stat().st_size).walk())
         elif args.command == "fat32-erase":
             output = erase_path(args.image, args.internal_path, args.confirm, args.case, progress)
+        elif args.command == "_validate":
+            from .validators import worker
+            worker(args.path, args.family)
+            return 0
+        elif args.command == "attack":
+            from .independent import attack
+            output = attack(args.target, args.output, args.sector_offset, progress)
+        elif args.command == "partitions":
+            from .partitions import inspect
+            output = inspect(args.target, args.sector_size)
         print(json.dumps(output, indent=2))
         return status
     except (EraseProofError, OSError, ValueError, KeyError) as error:

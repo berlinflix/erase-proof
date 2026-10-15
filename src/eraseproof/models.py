@@ -21,6 +21,7 @@ class Candidate:
     inode: str = ""
     output: str = ""
     sha256: str = ""
+    segments: list[list[int]] = field(default_factory=list)
 
     def to_dict(self):
         return asdict(self)
