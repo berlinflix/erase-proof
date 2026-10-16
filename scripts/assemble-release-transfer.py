@@ -21,6 +21,19 @@ def api(path, binary=False, method='GET'):
     return result.stdout if binary else json.loads(result.stdout) if result.stdout else None
 
 
+def asset_map(base):
+    result = {}
+    for page in range(1, 11):
+        entries = api(base+f'/assets?per_page=100&page={page}')
+        for entry in entries:
+            if entry['name'] in result:
+                raise ValueError('Ambiguous duplicate release asset name')
+            result[entry['name']] = entry
+        if len(entries) < 100:
+            return result
+    raise ValueError('Release asset inventory exceeds the bounded transfer scope')
+
+
 def main():
     repo = os.environ['GITHUB_REPOSITORY']
     release = os.environ['RELEASE_ID']
@@ -31,7 +44,7 @@ def main():
     current = api(base)
     if not current['draft']:
         raise ValueError('Only draft release transfers are accepted')
-    metadata = {a['name']: a for a in current['assets']}
+    metadata = asset_map(base)
     manifest_asset = metadata[name]
     if not 0 < manifest_asset['size'] <= 1024*1024:
         raise ValueError('Unbounded manifest')
@@ -85,7 +98,7 @@ def main():
             completed.append(filename)
         for target in uploads:
             subprocess.run(['gh', 'release', 'upload', current['tag_name'], str(target), '--repo', repo], check=True, timeout=600)
-        after = {a['name']: a for a in api(base)['assets']}
+        after = asset_map(base)
         for item in manifest['files']:
             entry = after[item['name']]
             if entry['state'] != 'uploaded' or entry['size'] != item['bytes'] or entry.get('digest') != 'sha256:'+item['sha256']:
