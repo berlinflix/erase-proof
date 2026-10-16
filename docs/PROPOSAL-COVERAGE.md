@@ -10,7 +10,7 @@ validation. Oracle VirtualBox acceptance is deferred by the user.
 | Native Ubuntu CLI and desktop, live USB | Qt application and Ubuntu 24.04 BIOS/UEFI ISO; released 0.11; QEMU boot and frozen workflow results | Rebuild after new milestones; actual VirtualBox demo |
 | Normally deleted files, independent of demo filenames or references | Metadata recovery, ext4 historical inode maps, raw carving, Ubuntu Trash copies; 24 exact fresh-file recoveries across four filesystems | Public-corpus accuracy evaluation |
 | File extent discovery, current-byte overwrite, metadata/history cleanup | FIEMAP and C direct I/O; offline FAT32/ext4/NTFS/exFAT global free-space, deleted metadata, journal/log/slack cleanup and preserved-file checks | Mounted-file erasure remains explicitly current-byte only; acquisition/offline cleanup required for history |
-| SHA-256 per 4 KiB plus ssdeep | Streaming fingerprints in file/offline erasers; standalone `fingerprint`; native and independent recovered-byte similarity checks | New milestone full regression and distribution validation |
+| SHA-256 per 4 KiB plus ssdeep | Streaming fingerprints in file/offline erasers; standalone `fingerprint`; native and independent recovered-byte similarity checks; 174 source tests and frozen agreement check passed | Final distribution acceptance |
 | Bifragment gap carving | Bounded PNG/ZIP/PDF/JPEG search, isolated unprivileged workers, decoder-guided JPEG boundaries and structural gap inference; fresh exact-file tests and two public fragmented JPEG recoveries | Declared resource/gap/format limits remain; arbitrary fragmentation is not guaranteed |
 | Validation, confidence and entropy | Isolated image/ZIP/PDF/SQLite validators; explicit validation/completeness/entropy components for recovered files; public DFRWS exact-byte comparison | Scores are structural heuristics, not calibrated original-byte probabilities; population-wide statistical calibration is not claimed |
 | Controller capability discovery | Linux inventory, sysfs ancestry, native pinned NVMe identity, ATA IDENTIFY/HPA/DCO integrity checks | Physical controller behavior |
@@ -24,7 +24,7 @@ validation. Oracle VirtualBox acceptance is deferred by the user.
 | Ed25519 JSON, audit chain, PDF and offline QR | Implemented, signatures/anchors and attached JSON validated | Rebuilt final artifacts |
 | Closed-loop escalation | Confirmed NVMe method chain, completion/action-log checks, namespace attacks and zero-score certificate gate; uncertainty/incomplete attacks block retry | Physical firmware/end-to-end acceptance |
 | Safety | Device allowlist, typed identity, mounted/root/holder refusal, dry-run plans; generated-image/owned-VM tests only | Regression for each newly introduced hardware command |
-| E1–E5 research evaluation | Real 1–8 GiB images, residue mutations, public DFRWS/PhotoRec/Foremost comparison and deterministic Govdocs 1 GiB deletion-method study | Complete ongoing public-volume study, throughput/CPU report and physical method measurements |
+| E1–E5 research evaluation | Real 1–8 GiB images, residue mutations, public DFRWS/PhotoRec/Foremost comparison, 16-case Govdocs 1 GiB study and measured dd/C/pipeline overhead | Physical method measurements; broad statistical confidence calibration is not claimed |
 
 The complete proposal is not yet accepted. Physical sanitization, hidden flash
 cells and chip-off recoverability cannot be established from a software simulator

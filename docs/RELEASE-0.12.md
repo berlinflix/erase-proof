@@ -45,12 +45,25 @@ Embedded files and partial reconstructions count as nonexact in this strict
 original-file-hash metric. Unsupported original file types remain in the recall
 denominator. These figures are not a promise of universal fragmented recovery.
 
-The focused firmware, interruption, signature, workflow, native UI and fragment
-tests and the full root/private-mount regression are recorded in the final
-validation manifest. The public Govdocs sample comparison uses actual 1 GiB
-FAT32/ext4/NTFS/exFAT mounts, identical create/atomic-save/backup/delete activity
-and independent post-method attacks. Completion evidence is added after those
-experiments finish.
+All **174 tests passed** on committed source `7b1361b` in a private root mount
+namespace. The standalone executable passed fresh PNG/JPEG reconstruction,
+independent ssdeep agreement, recovery/erasure, filesystem preservation, trusted
+signatures, attached PDF evidence, anchored audit and native Qt startup.
+
+The [public Govdocs comparison](validation/govdocs-0.12.json) completed all 16
+method/filesystem cases using 12 public files on actual 1 GiB FAT32/ext4/NTFS/exFAT
+mounts. All four EraseProof cases had zero measured target references and passed
+independent attacks, with the unrelated file preserved. Normal deletion, shred
+and single-file overwrite retained measured history in this activity scenario.
+The [confidence buckets](validation/confidence-0.12.json) retain exact original-byte
+match counts per structural score range, without claiming probability calibration.
+
+[Overhead measurements](validation/overhead-0.12.json) record dd with two flush
+schedules, C direct I/O and the full signed erasure/verification pipeline on a
+generated 1 GiB file. The full pipeline took 128.046 seconds in this concurrent
+WSL run; approximately 19.4% followed the first verification callback. These are
+single-run figures affected by the host, cache, allocation and concurrent work.
+The final validation manifest separately records live/virtual-device acceptance.
 
 ## Boundaries
 

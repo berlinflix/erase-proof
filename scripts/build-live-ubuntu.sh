@@ -146,5 +146,5 @@ for target in "$root/dev/pts" "$root/sys" "$root/proc"; do
   fi
 done
 du -sx --block-size=1 "$root" | cut -f1 > "$iso/casper/filesystem.size"
-mksquashfs "$root" "$iso/casper/filesystem.squashfs" -comp xz -noappend -processors 4 -no-progress
+mksquashfs "$root" "$iso/casper/filesystem.squashfs" -comp zstd -Xcompression-level 15 -noappend -processors 4 -no-progress
 bash "$scripts/assemble-live-iso.sh" "$work" "$output"

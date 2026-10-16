@@ -49,6 +49,15 @@ Public 1 GiB Govdocs FAT32/ext4 erasure comparisons passed independent attacks a
 unrelated-file preservation; NTFS/exFAT comparison runs continue. Physical media
 and actual VirtualBox acceptance remain explicitly unverified.
 
+0.12 evaluation milestone: **174 tests passed on committed source `7b1361b`**;
+standalone 0.12 passed expanded frozen workflows including fresh fragment recovery
+and real ssdeep agreement. All **16 public Govdocs method/filesystem cases** are
+complete. EraseProof passed RRS-zero/reference absence, all independent tools and
+unrelated-file preservation on each 1 GiB FAT32/ext4/NTFS/exFAT volume. Public
+confidence buckets and dd/C/full-pipeline CPU/throughput measurements are retained
+under `docs/validation`. Live packaging includes the self-test dependency and
+third-party notices; final boot/NVMe acceptance follows.
+
 Software tests use generated images and mock hardware command boundaries.
 The supplemental QEMU block-device test also passed exact unknown-format
 recovery from a generated raw disk, unchanged source reads, 64 MiB of native

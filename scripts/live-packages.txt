@@ -46,6 +46,7 @@ ntfs-3g
 exfatprogs
 util-linux
 python3
+python3-pil
 pcmanfm
 xdg-utils
 evince

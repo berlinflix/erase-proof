@@ -1,0 +1,60 @@
+{
+  "image_bytes": 1073741824,
+  "measurements": {
+    "dd-direct-final-fsync": {
+      "seconds": 0.635988,
+      "cpu_seconds_parent_and_reaped_children": 0.113584,
+      "mib_per_second": 1610.093
+    },
+    "dd-direct-dsync": {
+      "seconds": 64.359442,
+      "cpu_seconds_parent_and_reaped_children": 0.249364,
+      "mib_per_second": 15.911
+    },
+    "C-direct-fdatasync-per-chunk": {
+      "seconds": 88.426971,
+      "cpu_seconds_parent_and_reaped_children": 4.127556,
+      "mib_per_second": 11.58
+    },
+    "full-erasure-verification-pipeline": {
+      "seconds": 128.046286,
+      "cpu_seconds_parent_and_reaped_children": 29.838257,
+      "mib_per_second": 7.997
+    }
+  },
+  "progress_callback_timeline": {
+    "Discover": {
+      "first_seconds": 1.3896509169999263,
+      "last_seconds": 1.3896520199996303
+    },
+    "Erase": {
+      "first_seconds": 5.254049405999467,
+      "last_seconds": 102.98503541699938
+    },
+    "Verify": {
+      "first_seconds": 103.17042648999995,
+      "last_seconds": 107.3178111519992
+    },
+    "Attack": {
+      "first_seconds": 107.3797350269997,
+      "last_seconds": 117.77989666299982
+    },
+    "Independent attack": {
+      "first_seconds": 120.58306382499995,
+      "last_seconds": 121.7436637439996
+    },
+    "Certify": {
+      "first_seconds": 128.04623287699997,
+      "last_seconds": 128.0462370769992
+    }
+  },
+  "approximate_verification_share": 0.1942724017001169,
+  "rrs": 0,
+  "independent_tools": {
+    "PhotoRec": "completed",
+    "Sleuth Kit": "filesystem-unrecognized-or-error",
+    "bulk_extractor": "completed"
+  },
+  "physical_drives_used": 0,
+  "limitations": "Single-run generated sparse-file measurements, affected by caching, allocation and concurrent jobs. dd-final-fsync and C-per-chunk-fdatasync use different flush schedules; dd-dsync is also reported. Timeline uses the first/last progress callbacks, not instrumented syscall boundaries. CPU includes this process and reaped child descendants."
+}

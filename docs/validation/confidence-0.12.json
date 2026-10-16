@@ -1,0 +1,82 @@
+{
+  "corpus": "DFRWS 2006",
+  "buckets": {
+    "EraseProof-contiguous": [
+      {
+        "score_range": [
+          0,
+          39
+        ],
+        "outputs": 2,
+        "exact_original_outputs": 2,
+        "empirical_exact_match_fraction": 1.0
+      },
+      {
+        "score_range": [
+          40,
+          69
+        ],
+        "outputs": 0,
+        "exact_original_outputs": 0,
+        "empirical_exact_match_fraction": null
+      },
+      {
+        "score_range": [
+          70,
+          89
+        ],
+        "outputs": 0,
+        "exact_original_outputs": 0,
+        "empirical_exact_match_fraction": null
+      },
+      {
+        "score_range": [
+          90,
+          100
+        ],
+        "outputs": 14,
+        "exact_original_outputs": 6,
+        "empirical_exact_match_fraction": 0.42857142857142855
+      }
+    ],
+    "EraseProof-fragments": [
+      {
+        "score_range": [
+          0,
+          39
+        ],
+        "outputs": 2,
+        "exact_original_outputs": 2,
+        "empirical_exact_match_fraction": 1.0
+      },
+      {
+        "score_range": [
+          40,
+          69
+        ],
+        "outputs": 2,
+        "exact_original_outputs": 2,
+        "empirical_exact_match_fraction": 1.0
+      },
+      {
+        "score_range": [
+          70,
+          89
+        ],
+        "outputs": 0,
+        "exact_original_outputs": 0,
+        "empirical_exact_match_fraction": null
+      },
+      {
+        "score_range": [
+          90,
+          100
+        ],
+        "outputs": 13,
+        "exact_original_outputs": 6,
+        "empirical_exact_match_fraction": 0.46153846153846156
+      }
+    ]
+  },
+  "limits": "Structural scores are not calibrated probabilities. Exact original-byte identity is a stricter label than decodability or semantic validity; embedded files count as nonexact. Small public corpus and fixed score rules do not establish population-wide calibration."
+}
