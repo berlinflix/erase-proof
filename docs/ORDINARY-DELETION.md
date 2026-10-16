@@ -56,4 +56,9 @@ The experiment also found and fixed a PDF boundary error: the carver now retains
 the EOF line ending and follows contiguous incremental updates rather than
 silently returning the earlier revision.
 
+JPEG boundaries are parsed through application segments and scan markers, so an
+embedded thumbnail's end marker does not truncate the main photo. ZIP boundaries
+require a consistent central directory and local-header offsets, including ZIP64
+end records; footer-like bytes inside an ordinary archive member are ignored.
+
 Format reference: [Linux JBD2 journal structures](https://www.kernel.org/doc/html/latest/filesystems/ext4/journal.html).

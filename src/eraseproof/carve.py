@@ -10,7 +10,7 @@ import re
 
 from .models import Candidate, Cancelled, EraseProofError
 from .targets import describe, open_target
-from . import formats
+from . import formats, structures
 
 CHUNK = 4 * 1024 * 1024
 MAX_CANDIDATE = 256 * 1024 * 1024
@@ -73,6 +73,10 @@ def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
     stream.seek(offset)
     if kind == "PDF":
         return identify_pdf(stream, offset, limit)
+    if kind == "JPEG":
+        return structures.jpeg(stream, offset, limit)
+    if kind == "ZIP":
+        return structures.zip_archive(stream, offset, limit)
     if kind == "PNG":
         if stream.read(8) != SIGNATURES[0][0]:
             return None
@@ -109,30 +113,6 @@ def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
                 return Candidate(offset, pos-offset, kind, 99 if crc_valid else 45,
                                  ["PNG boundaries complete", "Chunk CRCs match" if crc_valid else "CRC mismatch"])
         return None
-    marker = {"PDF": b"%%EOF", "JPEG": b"\xff\xd9", "ZIP": b"PK\x05\x06"}[kind]
-    stream.seek(offset + 4)
-    pos, carry = offset + 4, b""
-    while pos < limit:
-        data = stream.read(min(CHUNK, limit-pos))
-        if not data:
-            break
-        window = carry + data
-        found = window.find(marker)
-        if found >= 0:
-            end = pos-len(carry)+found+len(marker)
-            if kind == "ZIP":
-                stream.seek(end)
-                tail = stream.read(18)
-                if len(tail) != 18:
-                    return None
-                comment_len = struct.unpack_from("<H", tail, 16)[0]
-                end += 18 + comment_len
-                if end > limit:
-                    return None
-            return Candidate(offset, end-offset, kind, {"PDF": 70, "JPEG": 60, "ZIP": 65}[kind],
-                             ["Header and end marker present", "Contiguous candidate; complete format semantics not validated"])
-        carry = window[-(len(marker)-1):]
-        pos += len(data)
     return None
 
 
