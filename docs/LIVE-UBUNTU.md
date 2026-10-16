@@ -13,6 +13,7 @@ construction tools:
 ```bash
 sudo apt-get install -y debootstrap squashfs-tools grub-common grub-pc-bin \
   grub-efi-amd64-bin xorriso mtools ubuntu-keyring python3
+.venv/bin/python scripts/package-release.py --prepare-only
 sudo bash scripts/build-live-ubuntu.sh "$PWD/dist/EraseProof" "$PWD/artifacts/EraseProof-live.iso"
 ```
 
@@ -20,6 +21,8 @@ The builder uses a private mount namespace and a new protected directory under
 `/var/tmp/eraseproof-live.*`. It retains that directory for inspection. Mounts
 are released when the process exits. It refuses an existing ISO output path.
 It never invokes a disk-writing or USB-burning command.
+Preparation writes license notices, source provenance and a bundle content
+manifest. Both builders verify that manifest before accepting the copied bundle.
 
 Package indexes are verified against signed Ubuntu InRelease files. Large
 downloads use bounded byte ranges and hashes; apt independently checks package

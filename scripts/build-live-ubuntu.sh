@@ -18,6 +18,8 @@ fi
 bundle="$(realpath -e -- "$1")"
 output="$(realpath -m -- "$2")"
 [[ -d "$bundle/_internal" && -x "$bundle/EraseProof" ]] || { echo "Build the standalone bundle first." >&2; exit 1; }
+python3 "$scripts/bundle_manifest.py" verify "$bundle"
+manifest_hash="$(sha256sum "$bundle/BUNDLE-CONTENTS.json" | cut -d ' ' -f1)"
 [[ "$output" == *.iso && ! -e "$output" && ! -L "$output" ]] || { echo "Choose a new .iso output path." >&2; exit 1; }
 [[ -d "$(dirname -- "$output")" ]] || { echo "Output directory does not exist." >&2; exit 1; }
 for executable in debootstrap mksquashfs grub-mkrescue xorriso chroot mount; do
@@ -103,7 +105,10 @@ install -m 644 "$scripts/eraseproof-boot-check.service" "$root/etc/systemd/syste
 mkdir -p "$root/etc/systemd/system/multi-user.target.wants"
 ln -sf ../eraseproof-boot-check.service "$root/etc/systemd/system/multi-user.target.wants/eraseproof-boot-check.service"
 app_stage="$(mktemp -d "$work/app-stage.XXXXXXXX")"
+python3 "$scripts/bundle_manifest.py" verify "$bundle"
 cp -a -- "$bundle/." "$app_stage/"
+python3 "$scripts/bundle_manifest.py" verify "$app_stage"
+[[ "$(sha256sum "$app_stage/BUNDLE-CONTENTS.json" | cut -d ' ' -f1)" == "$manifest_hash" ]] || { echo 'Bundle changed during live preparation'; exit 1; }
 python3 "$scripts/release_permissions.py" "$app_stage" --root-owner
 # A resumed build must not retain obsolete binaries from the previous bundle.
 # Keep the old application recoverable outside the rootfs snapshot.
