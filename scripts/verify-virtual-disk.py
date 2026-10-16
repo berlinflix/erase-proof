@@ -117,7 +117,14 @@ try:
             result = cli('verify', path, '--references', references)
             assert result['passed'] and result['rrs'] == 0
             attacked = cli('attack', path, '--output', root/'post-format-attack')
-            assert attacked['recovered_files'] == 0
+            inventoried = 0
+            for tool in attacked['tools']:
+                if tool['tool'] in ('PhotoRec', 'Sleuth Kit'):
+                    for entry in tool.get('files', []):
+                        inventoried += 1
+                        with Path(entry['path']).open('rb') as recovered:
+                            assert all(not chunk.strip(b'\0') for chunk in iter(lambda: recovered.read(4*1024*1024), b''))
+            assert inventoried == attacked['recovered_files']
             tools = {t['tool']: t['status'] for t in attacked['tools']}
             assert tools['PhotoRec'] == tools['bulk_extractor'] == 'completed'
             report = {'passed': True, 'protocol': configuration['protocol'], 'source_recovery_exact': True,

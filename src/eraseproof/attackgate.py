@@ -7,7 +7,6 @@ import shutil
 from .models import EraseProofError
 
 from .carve import CHUNK, checkpoint
-from .matching import Matcher
 
 
 def scan_file(path, refs, cancel=None):
@@ -16,15 +15,21 @@ def scan_file(path, refs, cancel=None):
     hashes = set(refs["block_hashes"])
     zero_block = bytes(block_size)
     patterns = [bytes.fromhex(pattern) for pattern in refs["metadata_patterns"]]
-    matcher = Matcher(patterns)
+    if patterns:
+        from .matching import Matcher
+        matcher = Matcher(patterns)
+    else:
+        matcher = None
     overlap = max([3584, block_size-512, *(len(pattern)-1 for pattern in patterns)])
     hashes_4096, matched_4096 = set(refs.get("block_hashes_4096", [])), set()
     blocks, metadata, carry, offset, sha = set(), set(), b"", 0, hashlib.sha256()
+    nonzero_bytes = 0
     from contextlib import nullcontext
     with Path(path).open("rb") as source, FuzzyHash() if refs.get("fuzzy_hashes") else nullcontext() as fuzzy:
         while data := source.read(CHUNK):
             checkpoint(cancel)
             sha.update(data)
+            nonzero_bytes += len(data) - data.count(0)
             if fuzzy:
                 fuzzy.update(data)
             window, base = carry+data, offset-len(carry)
@@ -33,7 +38,8 @@ def scan_file(path, refs, cancel=None):
                     block = window[at:at+block_size]
                     if block != zero_block and (value := hashlib.sha256(block).hexdigest()) in hashes:
                         blocks.add(value)
-            metadata.update(index for _, index in matcher.first(window))
+            if matcher:
+                metadata.update(index for _, index in matcher.first(window))
             if hashes_4096:
                 for at in range((-base) % 512, len(window)-4096+1, 512):
                     block = window[at:at+4096]
@@ -43,7 +49,7 @@ def scan_file(path, refs, cancel=None):
             offset += len(data)
         fuzzy_matches = matches(fuzzy.hexdigest(), refs["fuzzy_hashes"], refs.get("fuzzy_threshold", 70)) if fuzzy else []
     digest = sha.hexdigest()
-    return {"sha256": digest, "bytes": offset, "block_hashes": sorted(blocks),
+    return {"sha256": digest, "bytes": offset, "nonzero_bytes": nonzero_bytes, "block_hashes": sorted(blocks),
             "metadata_indices": sorted(metadata), "full_file_match": digest in refs.get("file_hashes", []),
             "block_hashes_4096": sorted(matched_4096), "fuzzy_matches": fuzzy_matches}
 
@@ -73,17 +79,21 @@ def check(path, output_dir, refs, *, stream, length, expected_sha256, zero_readb
     features_ok = tools.get("bulk_extractor", {}).get("status") == "completed"
     metadata_superseded = bool(zero_readback and tools.get("Sleuth Kit", {}).get("status") == "filesystem-unrecognized-or-error")
     matches, blocks, metadata, files, blocks_4096, fuzzy_matches = [], set(), set(), set(), set(), set()
+    zero_only_files = nonzero_files = 0
     for tool in report["tools"]:
         for entry in tool.get("files", []):
             checkpoint(cancel)
             measured = scan_file(entry.get("path", entry.get("output")), refs, cancel)
+            if tool['tool'] in ('PhotoRec', 'Sleuth Kit'):
+                zero_only_files += measured['nonzero_bytes'] == 0
+                nonzero_files += measured['nonzero_bytes'] > 0
             blocks.update(measured["block_hashes"])
             metadata.update(measured["metadata_indices"])
             blocks_4096.update(measured["block_hashes_4096"])
             fuzzy_matches.update(match["reference_index"] for match in measured["fuzzy_matches"])
             if measured["full_file_match"]:
                 files.add(measured["sha256"])
-            entry.update({"sha256": measured["sha256"], "target_residue": bool(measured["block_hashes"] or measured["metadata_indices"] or measured["full_file_match"] or measured["block_hashes_4096"] or measured["fuzzy_matches"])})
+            entry.update({"sha256": measured["sha256"], "nonzero_bytes": measured['nonzero_bytes'], "target_residue": bool(measured["block_hashes"] or measured["metadata_indices"] or measured["full_file_match"] or measured["block_hashes_4096"] or measured["fuzzy_matches"])})
             if entry["target_residue"] and len(matches) < 1000:
                 matches.append({"tool": tool["tool"], "path": entry.get("path", entry.get("output")), **measured})
     after = hash_stream(stream, length, cancel)
@@ -92,7 +102,11 @@ def check(path, output_dir, refs, *, stream, length, expected_sha256, zero_readb
     report_path = Path(output_dir)/"attack.json"
     report_path.write_text(json.dumps(report, indent=2)+"\n")
     count = len(blocks)+len(metadata)+len(files)+len(blocks_4096)+len(fuzzy_matches)
-    no_recovery_after_zero = not zero_readback or report["recovered_files"] == 0
+    # Some PhotoRec versions carve zero-filled .dovecot artifacts from an
+    # entirely zeroed source. Preserve and hash them, but do not call them
+    # surviving content. Any nonzero recovered byte still refuses this gate.
+    no_recovery_after_zero = not zero_readback or (
+        nonzero_files == 0 and zero_only_files == report['recovered_files'])
     return {"passed": carving_ok and features_ok and (metadata_ok or metadata_superseded) and count == 0 and no_recovery_after_zero,
             "required_tools": {tool: tools.get(tool, {}).get("status") for tool in ("PhotoRec", "Sleuth Kit", "bulk_extractor")},
             "metadata_gate": "superseded-by-complete-zero-readback" if metadata_superseded else "required-filesystem-parse",
@@ -100,5 +114,6 @@ def check(path, output_dir, refs, *, stream, length, expected_sha256, zero_readb
             "matching_file_hashes": sorted(files), "findings": matches, "finding_limit": 1000,
             "matching_4096_blocks": sorted(blocks_4096), "matching_fuzzy_references": sorted(fuzzy_matches),
             "recovered_files": report["recovered_files"], "report": str(report_path),
+            "zero_only_recovered_files": zero_only_files, "nonzero_recovered_files": nonzero_files,
             "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(), "source_unchanged": True,
             "scope": "Bounded PhotoRec, Sleuth Kit and bulk_extractor output, comparing extracted bytes/features with target references. A parser error is not a clean metadata result; complete zero readback can supersede metadata parsing after whole-image overwrite."}

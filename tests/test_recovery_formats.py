@@ -88,7 +88,14 @@ def test_native_and_independent_attack_results_before_and_after_wipe(tmp_path):
         stream.write(bytes(path.stat().st_size))
     after = attack(path, tmp_path/"after", timeout=60)
     assert not after["complete"]  # No filesystem parser success is fabricated after the filesystem is wiped.
-    assert after["recovered_files"] == 0
+    inventoried = 0
+    for tool in after['tools']:
+        if tool['tool'] in ('PhotoRec', 'Sleuth Kit'):
+            for entry in tool.get('files', []):
+                inventoried += 1
+                with Path(entry['path']).open('rb') as recovered:
+                    assert all(not chunk.strip(b'\0') for chunk in iter(lambda: recovered.read(4*1024*1024), b''))
+    assert inventoried == after['recovered_files']
     assert next(t for t in after["tools"] if t["tool"] == "Sleuth Kit")["status"] == "filesystem-unrecognized-or-error"
 
 

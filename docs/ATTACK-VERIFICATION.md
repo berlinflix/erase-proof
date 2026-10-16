@@ -26,6 +26,14 @@ the absence of a readable filesystem is expected: a completed exhaustive zero
 readback can supersede metadata parsing. The exact parser failure remains in
 the report. A timeout or unavailable tool does not become a clean result.
 
+Some PhotoRec versions emit zero-filled `.dovecot` artifacts from an entirely
+zeroed image. The gate preserves every output, measures its nonzero byte count,
+and records the original recovered-file count. After complete zero readback,
+those artifacts can pass only when every recovered file is accounted for, every
+recovered byte is zero, no target references match, and the required scanners
+complete. Any nonzero recovered byte still refuses certification. Feature-file
+headers are inspected for target references separately from recovered content.
+
 bulk_extractor's zero exit code alone is insufficient. Its bounded XML report
 must parse, report the full source byte count and contain no reported exceptions
 or scanner errors. Truncated, missing, malformed and incomplete reports fail the

@@ -64,7 +64,17 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     after = run("recover", manifest["image"], "--mode", "carve", "--output", root/"after")
     assert after["candidates"] == []
     independent = run("attack", manifest["image"], "--output", root/"independent-after")
-    assert independent["recovered_files"] == 0
+    gate = result['record']['payload']['verification']['independent_attack']
+    assert gate['passed'] and gate['nonzero_recovered_files'] == 0
+    assert gate['zero_only_recovered_files'] == gate['recovered_files']
+    inventoried = 0
+    for tool in independent['tools']:
+        if tool['tool'] in ('PhotoRec', 'Sleuth Kit'):
+            for entry in tool.get('files', []):
+                inventoried += 1
+                with Path(entry['path']).open('rb') as recovered_output:
+                    assert all(not chunk.strip(b'\0') for chunk in iter(lambda: recovered_output.read(4*1024*1024), b''))
+    assert inventoried == independent['recovered_files']
     assert next(t for t in independent["tools"] if t["tool"] == "PhotoRec")["status"] == "completed"
     logical = root/"logical.txt"
     logical.write_text("Native executable targeted erasure fixture")
@@ -122,4 +132,4 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     gui.terminate()
     gui.wait(timeout=10)
     assert all(c["confidence"] >= 98 for c in recovery["candidates"] if c["method"] != "sleuthkit-metadata")
-    print(json.dumps({"binary": binary, "version": doctor["version"], "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_and_expected_signer_valid": True, "pdf_attachment_valid": True, "anchored_audit_intact": True, "independent_photorec_after_files": 0, "targeted_file_erasure": "passed", "native_direct_io_bytes": 64*1024*1024, "offline_fat32_erasure_and_preservation": "passed", "offline_ext4_erasure_and_preservation": "passed", "offline_ntfs_erasure_and_preservation": "passed", "native_qt_process_startup": "passed"}, indent=2))
+    print(json.dumps({"binary": binary, "version": doctor["version"], "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_and_expected_signer_valid": True, "pdf_attachment_valid": True, "anchored_audit_intact": True, "independent_photorec_after_files": next(t for t in independent["tools"] if t["tool"] == "PhotoRec")["recovered_files"], "independent_nonzero_recovered_files": gate["nonzero_recovered_files"], "independent_zero_only_recovered_files": gate["zero_only_recovered_files"], "targeted_file_erasure": "passed", "native_direct_io_bytes": 64*1024*1024, "offline_fat32_erasure_and_preservation": "passed", "offline_ext4_erasure_and_preservation": "passed", "offline_ntfs_erasure_and_preservation": "passed", "native_qt_process_startup": "passed"}, indent=2))
