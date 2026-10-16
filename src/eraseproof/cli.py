@@ -147,14 +147,17 @@ def parser():
     fw.add_argument("internal_path")
     fw.add_argument("--confirm", required=True)
     fw.add_argument("--case", required=True)
-    ep = sub.add_parser("ext4-plan", help="Inspect offline ext4 targeted erasure and global history cleanup")
-    ep.add_argument("image")
-    ep.add_argument("internal_path")
-    ee = sub.add_parser("ext4-erase", help="Erase a selected ext4 image path and all unallocated/journal/slack history")
-    ee.add_argument("image")
-    ee.add_argument("internal_path")
-    ee.add_argument("--confirm", required=True)
-    ee.add_argument("--case", required=True)
+    for filesystem in ("ext4", "ntfs"):
+        listing = sub.add_parser(filesystem+"-list", help="List allocated paths in an offline "+filesystem+" volume image")
+        listing.add_argument("image")
+        ep = sub.add_parser(filesystem+"-plan", help="Inspect offline "+filesystem+" targeted erasure and global history cleanup")
+        ep.add_argument("image")
+        ep.add_argument("internal_path")
+        ee = sub.add_parser(filesystem+"-erase", help="Erase a selected "+filesystem+" image path and clear deleted history on the volume")
+        ee.add_argument("image")
+        ee.add_argument("internal_path")
+        ee.add_argument("--confirm", required=True)
+        ee.add_argument("--case", required=True)
     worker = sub.add_parser("_validate", help=argparse.SUPPRESS)
     worker.add_argument("path")
     worker.add_argument("family")
@@ -201,6 +204,7 @@ def main(argv=None):
                       "tools": {name: shutil.which(name) for name in ("lsblk", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm")},
                       "native_direct_io": library() is not None,
                       "offline_ext4_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4").is_file(),
+                      "offline_ntfs_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ntfs").is_file(),
                       "ext4_journal_reader": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4-journal").is_file(),
                       "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":
@@ -278,12 +282,16 @@ def main(argv=None):
         elif args.command == "media-probe":
             from .media import probe
             output = probe(args.target)
-        elif args.command == "ext4-plan":
-            from .ext4 import plan_path
-            output = plan_path(args.image, args.internal_path)
-        elif args.command == "ext4-erase":
-            from .ext4 import erase_path as ext4_erase
-            output = ext4_erase(args.image, args.internal_path, args.confirm, args.case, progress)
+        elif args.command in {fs+"-"+action for fs in ("ext4", "ntfs") for action in ("list", "plan", "erase")}:
+            from . import ext4, ntfs
+            filesystem, action = args.command.split("-", 1)
+            adapter = {"ext4": ext4, "ntfs": ntfs}[filesystem]
+            if action == "list":
+                output = adapter.list_paths(args.image)
+            elif action == "plan":
+                output = adapter.plan_path(args.image, args.internal_path)
+            else:
+                output = adapter.erase_path(args.image, args.internal_path, args.confirm, args.case, progress)
         elif args.command == "nvme-plan":
             from .media import nvme_probe, nvme_plan
             output = nvme_plan(nvme_probe(args.controller), args.method, args.allow_controller, args.confirm)

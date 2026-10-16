@@ -61,7 +61,13 @@ The carver scans in 4 MiB chunks, with a 256 MiB candidate limit. Recovered imag
 
 The software milestones and exact validation state are tracked in [MILESTONES.md](MILESTONES.md). Device command scope is in [MEDIA.md](MEDIA.md); signer trust, PDF verification and truncation detection are in [EVIDENCE.md](EVIDENCE.md).
 
-Remaining implementation/evaluation covers NTFS/exFAT targeted history cleanup, broader fragmentation, ATA destructive commands, HPA/DCO changes, privileged orchestration, unknown snapshots/copies, public operator trust infrastructure and physical-media sanitization assurance. The C I/O and offline ext4 components are unprivileged and use policy-checked descriptors. No mounted filesystem is scrubbed through guessed raw extents or blind journal edits.
+The shared offline coordinator fingerprints selected files and preserves hashes
+of unrelated allocated user streams. Ext4 uses libext2fs; NTFS uses libntfs-3g
+plus ntfswipe, with complete free-cluster and allocated USN readback. Both keep
+filesystem-specific pre/post consistency gates and fail without certification
+when unknown free-space bytes remain.
+
+Remaining implementation/evaluation covers exFAT targeted history cleanup, broader fragmentation, ATA destructive commands, HPA/DCO changes, privileged orchestration, unknown snapshots/copies, public operator trust infrastructure and physical-media sanitization assurance. The C I/O and offline filesystem components are unprivileged and use policy-checked descriptors. No mounted filesystem is scrubbed through guessed raw extents or blind journal edits.
 
 The default image experiment and GUI flow are tested in WSL Ubuntu. VirtualBox guest device I/O and physical media need separate acceptance tests; a VM result must not be presented as host SSD sanitization.
 

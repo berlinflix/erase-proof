@@ -11,4 +11,7 @@ cc -std=c11 -O2 -Wall -Wextra -Werror \
 cc -std=c11 -O2 -Wall -Wextra -Werror \
   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -Wl,-z,relro,-z,now \
   native/ext4_journal.c -lext2fs -lcom_err -o src/eraseproof/resources/native/eraseproof-ext4-journal
-echo 'Built unprivileged Linux I/O library.'
+cc -std=c11 -O2 -Wall -Wextra -Werror \
+  -D_FORTIFY_SOURCE=2 -fstack-protector-strong -Wl,-z,relro,-z,now \
+  native/ntfs.c -lntfs-3g -o src/eraseproof/resources/native/eraseproof-ntfs
+echo 'Built unprivileged Linux I/O and filesystem adapters.'

@@ -208,12 +208,37 @@ static void scrub(void) {
     free(zero); free(empty);
 }
 
+static void verify_free(void) {
+    char *buffer = malloc(fs->blocksize);
+    unsigned long long checked = 0, nonzero = 0, dirty = 0;
+    if (!buffer) fail("Out of memory.");
+    for (blk64_t block = fs->super->s_first_data_block; block < ext2fs_blocks_count(fs->super); block++) {
+        if (ext2fs_test_block_bitmap2(fs->block_map, block)) continue;
+        check(io_channel_read_blk64(fs->io, block, 1, buffer), "Read free block for verification");
+        unsigned int count = 0;
+        for (unsigned int i = 0; i < fs->blocksize; i++) count += buffer[i] != 0;
+        nonzero += count;
+        dirty += count != 0;
+        checked++;
+    }
+    free(buffer);
+    printf("{\"passed\":%s,\"free_blocks_checked\":%llu,\"nonzero_free_blocks\":%llu,\"nonzero_free_bytes\":%llu}\n",
+           nonzero ? "false" : "true", checked, dirty, nonzero);
+}
+
 int main(int argc, char **argv) {
     int writable;
     if (argc < 3 || argc > 4) fail("Usage: eraseproof-ext4 info|remove|scrub image-fd [internal-path]");
-    writable = strcmp(argv[1], "info") != 0;
-    if (strcmp(argv[1], "info") && strcmp(argv[1], "remove") && strcmp(argv[1], "scrub")) fail("Unknown operation.");
+    writable = strcmp(argv[1], "info") && strcmp(argv[1], "verify-free");
+    if (strcmp(argv[1], "info") && strcmp(argv[1], "remove") && strcmp(argv[1], "scrub") && strcmp(argv[1], "verify-free")) fail("Unknown operation.");
+    if ((!strcmp(argv[1], "remove") && argc != 4) ||
+        ((!strcmp(argv[1], "scrub") || !strcmp(argv[1], "verify-free")) && argc != 3)) fail("Unexpected command arguments.");
     open_image(argv[2], writable);
+    if (!strcmp(argv[1], "verify-free")) {
+        verify_free();
+        check(ext2fs_close(fs), "Close filesystem");
+        return 0;
+    }
     if (!strcmp(argv[1], "info") && argc == 4) {
         ext2_ino_t ino, parent;
         struct ext2_inode inode;

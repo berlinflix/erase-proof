@@ -63,6 +63,7 @@ The native **Targeted erasure** page and CLI support these operations:
 - `file-plan` / `erase-files`: pin each ordinary file's identity, overwrite and read back its current bytes, then unlink. Symlinks, hard links, protected system paths, cross-device trees and evidence inside the target are refused. The signed record explicitly excludes journals, snapshots and previous copies.
 - `fat32-list` / `fat32-erase`: edit an offline, unattached FAT32 volume image. The engine validates both FAT copies and allocation chains, erases selected file/folder clusters and long/short directory records, searches free clusters for known sector copies, and preserves unrelated live files. Tests run `fsck.fat` and byte-match preserved files after the operation.
 - `ext4-plan` / `ext4-erase`: use the C/libext2fs adapter to remove an internal image file/folder, clear all unallocated blocks and unused inodes, scrub directory slack and inactive journal payload, and hash-check unrelated allocated files. Both pre/post `e2fsck -fn` checks must pass. This also removes other deleted-file history on that volume. See [ext4 scope and supported features](docs/OFFLINE-EXT4.md).
+- `ntfs-list` / `ntfs-plan` / `ntfs-erase`: remove a selected NTFS image file/folder with its named data streams, clear free clusters and MFT/index/log/USN history, and hash-check preserved user streams. Both pre/post consistency checks and complete free-cluster/USN readback must pass. This removes other deleted history on the volume. See [NTFS scope and validation](docs/OFFLINE-NTFS.md).
 
 ```bash
 eraseproof file-plan /path/to/selected-folder
@@ -112,7 +113,7 @@ The **Media methods** page and CLI inspect native NVMe/ATA capabilities and soft
 
 This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
 
-Remaining work includes NTFS/exFAT targeted history cleanup, ATA destructive adapters, HPA/DCO changes, broader fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
+Remaining work includes exFAT targeted history cleanup, ATA destructive adapters, HPA/DCO changes, broader fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
 
 Metadata recovery uses the real Sleuth Kit. The carver streams large sources in chunks; candidates are bounded to 256 MiB. PNG/ZIP checksums, bounded image decoding and strict PDF parsing provide format-specific evidence. Container-only checks are labelled. Confidence is a heuristic; it is not a probability or proof of semantic correctness.
 
@@ -125,7 +126,7 @@ Cancellation of a real overwrite is **not reversible**: the target may be partia
 ## Development
 
 ```bash
-sudo apt-get install -y gcc libext2fs-dev e2fsprogs ntfs-3g exfatprogs ffmpeg p7zip-full
+sudo apt-get install -y gcc libext2fs-dev ntfs-3g-dev e2fsprogs ntfs-3g exfatprogs ffmpeg p7zip-full
 bash scripts/build-native.sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[desktop,test]'
