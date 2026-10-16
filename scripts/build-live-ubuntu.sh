@@ -97,6 +97,8 @@ exec dbus-run-session -- /opt/eraseproof/EraseProof
 EOF
 chmod 755 "$root/etc/skel/.xinitrc"
 install -m 755 "$scripts/live-boot-check.sh" "$root/usr/local/bin/eraseproof-boot-check"
+mkdir -p "$root/usr/local/lib"
+install -m 644 "$scripts/verify-frozen.py" "$root/usr/local/lib/eraseproof-verify-frozen.py"
 install -m 644 "$scripts/eraseproof-boot-check.service" "$root/etc/systemd/system/eraseproof-boot-check.service"
 mkdir -p "$root/etc/systemd/system/multi-user.target.wants"
 ln -sf ../eraseproof-boot-check.service "$root/etc/systemd/system/multi-user.target.wants/eraseproof-boot-check.service"

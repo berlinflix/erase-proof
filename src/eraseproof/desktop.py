@@ -119,6 +119,7 @@ def table(headers):
     widget.setAlternatingRowColors(True)
     widget.setShowGrid(False)
     widget.verticalHeader().setDefaultSectionSize(47)
+    widget.resizeColumnsToContents()
     widget.setMinimumHeight(180)
     return widget
 

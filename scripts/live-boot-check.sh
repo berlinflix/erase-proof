@@ -24,4 +24,7 @@ for record in "$work/evidence/"*.epcert.json; do
 done
 "$app" --cli pdf-record "$work/report.pdf" > "$work/pdf-record.json"
 "$app" --cli audit "$work/evidence" > "$work/audit.json"
+# Exercise the shipped binary against Noble's actual filesystem tools as well
+# as the basic whole-image demonstration. This creates temporary images only.
+python3 /usr/local/lib/eraseproof-verify-frozen.py "$app" > "$work/frozen-workflow.json"
 echo ERASEPROOF_BOOT_CHECK_PASS
