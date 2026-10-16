@@ -11,20 +11,20 @@ validation. Oracle VirtualBox acceptance is deferred by the user.
 | Normally deleted files, independent of demo filenames or references | Metadata recovery, ext4 historical inode maps, raw carving, Ubuntu Trash copies; 24 exact fresh-file recoveries across four filesystems | Public-corpus accuracy evaluation |
 | File extent discovery, current-byte overwrite, metadata/history cleanup | FIEMAP and C direct I/O; offline FAT32/ext4/NTFS/exFAT global free-space, deleted metadata, journal/log/slack cleanup and preserved-file checks | Mounted-file erasure remains explicitly current-byte only; acquisition/offline cleanup required for history |
 | SHA-256 per 4 KiB plus ssdeep | Streaming fingerprints in file/offline erasers; standalone `fingerprint`; native and independent recovered-byte similarity checks | New milestone full regression and distribution validation |
-| Bifragment gap carving | Existing PNG chunk-boundary reconstruction | Extend inside data and to other proposed formats; public corpus |
-| Validation, confidence and entropy | Isolated image/ZIP/PDF validators; structural scores | Add explicit entropy/completeness components and measured calibration |
-| Controller capability discovery | Linux inventory; NVMe identify/namespaces; ATA IDENTIFY/HPA/DCO query | Expanded firmware execution adapters and immutable identity checks |
+| Bifragment gap carving | Bounded PNG/ZIP/PDF/JPEG search, isolated unprivileged workers, decoder-guided JPEG boundaries and structural gap inference; fresh exact-file tests and two public fragmented JPEG recoveries | Declared resource/gap/format limits remain; arbitrary fragmentation is not guaranteed |
+| Validation, confidence and entropy | Isolated image/ZIP/PDF/SQLite validators; explicit validation/completeness/entropy components for recovered files; public DFRWS exact-byte comparison | Scores are structural heuristics, not calibrated original-byte probabilities; population-wide statistical calibration is not claimed |
+| Controller capability discovery | Linux inventory, sysfs ancestry, native pinned NVMe identity, ATA IDENTIFY/HPA/DCO integrity checks | Physical controller behavior |
 | NVMe sanitize | Allowlisted controller-wide submission, exclusive namespace opens, audited uncertain/accepted states | Spare physical controller validation; command acceptance is not certification |
-| NVMe Format with cryptographic erase | Not yet implemented | Namespace scope/format preservation, execution and virtual NVMe test |
-| ATA sanitize / Enhanced Secure Erase | Read-only discovery only | Capability parser, state/identity gates, commands and recovery receipts |
-| HPA/DCO opening and post-wipe checks | Read-only discovery only; unknown is never absent | Explicit capacity-change transaction and read-back |
-| HDD/USB/SD overwrite, discard and hidden-media distinction | Complete image/secondary virtual-disk overwrite and full logical readback | Guarded physical-device workflow and optional discard; physical media evaluation |
-| Encrypted storage discovery and crypto erase | Real LUKS2 image keyslot removal, tested original-passphrase refusal | BitLocker/SED detection; external/cached keys remain outside local deletion |
+| NVMe Format with cryptographic erase | C admin ioctl, OACS/FNA scope, sector-format preservation, all-namespace identity/exclusivity and post-format checks | Disposable virtual NVMe and spare physical-controller acceptance |
+| ATA sanitize / Enhanced Secure Erase | C SG_IO, native capability/state gates, saved private recovery credentials, audited interruption and explicit security recovery | Spare physical SATA hardware acceptance |
+| HPA/DCO opening and post-wipe checks | Explicit factory-capacity confirmation, HPA/DCO transaction, legacy/ACS3 commands, full capacity/identity read-back and overwrite pre/post checks | Spare physical hidden-capacity hardware acceptance |
+| HDD/USB/SD overwrite, discard and hidden-media distinction | Guarded host-device overwrite/full logical readback and independent attacks; separate discard receipts | Physical media evaluation; hidden flash/chip-off assurance is not inferred |
+| Encrypted storage discovery and crypto erase | Real LUKS2 image keyslot removal; BitLocker/partition signatures and bounded native TCG Level 0 discovery | Physical SED/BitLocker evaluation; external/cached keys remain outside local deletion |
 | Independent verification | Required PhotoRec/TSK/bulk_extractor, output-byte comparison, completeness/resource gates, source continuity | Extend fuzzy findings to calibration and mutation measurements |
 | Ed25519 JSON, audit chain, PDF and offline QR | Implemented, signatures/anchors and attached JSON validated | Rebuilt final artifacts |
-| Closed-loop escalation | Failed result retained; expanded destructive scope requires a new exact confirmation | Explicit bounded same-scope retry coordinator |
+| Closed-loop escalation | Confirmed NVMe method chain, completion/action-log checks, namespace attacks and zero-score certificate gate; uncertainty/incomplete attacks block retry | Physical firmware/end-to-end acceptance |
 | Safety | Device allowlist, typed identity, mounted/root/holder refusal, dry-run plans; generated-image/owned-VM tests only | Regression for each newly introduced hardware command |
-| E1–E5 research evaluation | Real 1–8 GiB images and independent attackers; several mutation tests | Comparable deletion-method study, public Govdocs/DFRWS data, Foremost comparison, throughput/CPU report; physical methods require spare hardware |
+| E1–E5 research evaluation | Real 1–8 GiB images, residue mutations, public DFRWS/PhotoRec/Foremost comparison and deterministic Govdocs 1 GiB deletion-method study | Complete ongoing public-volume study, throughput/CPU report and physical method measurements |
 
 The complete proposal is not yet accepted. Physical sanitization, hidden flash
 cells and chip-off recoverability cannot be established from a software simulator

@@ -22,6 +22,23 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     root = Path(temporary)
     doctor = run("doctor")
     assert doctor["native_direct_io"] and doctor["offline_ext4_adapter"] and doctor["offline_ntfs_adapter"]
+    assert doctor['ssdeep_streaming'] and doctor['native_firmware_adapter'] and doctor['strict_jpeg_fragment_validator']
+    from PIL import Image
+    import io
+    original = os.urandom(63179)
+    reference_file = root/'fresh.custom'
+    reference_file.write_bytes(original)
+    fingerprint = run('fingerprint', reference_file)
+    independent_fuzzy = subprocess.run(['ssdeep', '-b', str(reference_file)], capture_output=True, text=True, check=True).stdout.splitlines()[1].split(',', 1)[0]
+    assert fingerprint['fingerprint']['ssdeep'] == independent_fuzzy
+    for kind, split in (('PNG', 1536), ('JPEG', 512)):
+        buffer = io.BytesIO()
+        Image.frombytes('RGB', (137, 113), os.urandom(137*113*3)).save(buffer, kind)
+        payload = buffer.getvalue()
+        fragmented = root/('fragment-'+kind.lower()+'.img')
+        fragmented.write_bytes(bytes(512)+payload[:split]+os.urandom(512)+payload[split:]+bytes(512))
+        report = run('recover', fragmented, '--mode', 'carve', '--fragments', '--output', root/('fragments-'+kind))
+        assert hashlib.sha256(payload).hexdigest() in {c['sha256'] for c in report['candidates']}
     manifest = run("demo", "create", root/"experiment", "--deleted")
     recovery = run("recover", manifest["image"], "--output", root/"recovery")
     expected = {item["sha256"] for item in manifest["files"]}

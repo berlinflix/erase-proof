@@ -61,7 +61,7 @@ def hash_stream(stream, length, cancel=None):
     return digest.hexdigest()
 
 
-def verify(path, references=None, progress=None, cancel=None, stream=None, length=None):
+def verify(path, references=None, progress=None, cancel=None, stream=None, length=None, *, fragment_search=True):
     refs = validate_references(references)
     owned = stream is None
     if owned:
@@ -118,7 +118,7 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
             checked += len(data)
             if progress:
                 progress("Verify", .6*checked/max(length, 1), f"Read back {checked:,} bytes; {nonzero:,} nonzero bytes")
-        files = carve.scan(path, stream=stream, length=length, cancel=cancel,
+        files = carve.scan(path, stream=stream, length=length, cancel=cancel, fragmented=fragment_search,
                            progress=(lambda _, p, m: progress("Attack", .6+.4*p, m)) if progress else None)
         fuzzy_findings = []
         if refs["fuzzy_hashes"]:
@@ -153,12 +153,16 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
             stream.close()
 
 
-def plan(path, allow_device=None, confirmation=None):
+def plan(path, allow_device=None, confirmation=None, *, host_device=False):
     target = describe(path)
     if target["size"] == 0:
         raise EraseProofError("Empty targets are refused.")
     if target["kind"] == "block-device":
-        target = virtual_disk_policy(path, confirmation, allow_device)
+        if host_device:
+            from .targets import device_policy
+            target = device_policy(path, confirmation, allow_device)
+        else:
+            target = virtual_disk_policy(path, confirmation, allow_device)
     elif Path(path).suffix.lower() not in (".img", ".raw", ".dd", ".bin"):
         raise EraseProofError("Image overwrite requires a .img, .raw, .dd or .bin target.")
     else:
@@ -168,11 +172,11 @@ def plan(path, allow_device=None, confirmation=None):
             "warning": "This changes the actual selected file or guest-visible virtual disk, including its filesystem."}
 
 
-def erase(path, confirmation, evidence_dir, references=None, allow_device=None, progress=None, cancel=None):
+def erase(path, confirmation, evidence_dir, references=None, allow_device=None, progress=None, cancel=None, *, host_device=False):
     from . import attackgate
     started_at, started = now(), time.monotonic()
     references = validate_references(references)  # Reject invalid jobs before the first destructive write.
-    prepared = plan(path, allow_device, confirmation)
+    prepared = plan(path, allow_device, confirmation, host_device=host_device)
     target = prepared["target"]
     if confirmation != target["serial"]:
         raise EraseProofError("Type the exact image filename or virtual-device serial to confirm.")
@@ -194,6 +198,13 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
             raise EraseProofError("Image size changed while opening.")
         if target["kind"] == "virtual-block-device":
             virtual_disk_policy(path, confirmation, allow_device)  # Fresh mount/identity check after open.
+        elif target["kind"] == "host-block-device":
+            from .targets import device_policy, find_device
+            from .media import outside_devices
+            fresh = device_policy(path, confirmation, allow_device)
+            if fresh != target:
+                raise EraseProofError('Device identity, capacity or hidden-area state changed after planning.')
+            outside_devices(evidence_dir, [find_device(path)[0]])
         else:
             require_unattached_image(target['path'])
         if progress:
@@ -244,6 +255,11 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
             result["passed"] &= result["independent_attack"]["passed"]
             if not result["passed"]:
                 raise EraseProofError("Independent recovery check failed. No certificate issued.")
+            if target['kind'] == 'host-block-device':
+                fresh = device_policy(path, confirmation, allow_device)
+                if fresh != target:
+                    raise EraseProofError('Post-wipe identity, capacity or HPA/DCO state changed; certification refused.')
+                result['hidden_areas_after'] = fresh['hidden_areas']
             if stat.S_ISREG(opened.st_mode) and os.fstat(stream.fileno()).st_size != target["size"]:
                 raise EraseProofError("Image size changed during verification. Certification refused.")
         except BaseException as error:

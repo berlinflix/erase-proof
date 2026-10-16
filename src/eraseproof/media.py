@@ -65,27 +65,36 @@ def nvme_probe(controller):
     identify = command(["nvme", "id-ctrl", str(path), "-o", "json"], True)
     namespace_data = command(["nvme", "list-ns", str(path), "--all", "-o", "json"], True)
     namespace_ids = namespace_data.get("nsid_list")
-    if not isinstance(namespace_ids, list) or any(not isinstance(n, int) or n <= 0 for n in namespace_ids):
+    if not isinstance(namespace_ids, list) or len(namespace_ids) > 1024 or any(not isinstance(n, int) or isinstance(n, bool) or n <= 0 for n in namespace_ids):
         raise EraseProofError("Unsupported namespace inventory response; controller execution is blocked.")
     namespaces = controller_namespaces(path)
+    from .encryption import inspect_sed
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    try:
+        sed = inspect_sed(fd)
+    finally:
+        os.close(fd)
+    try:
+        sanitize_log = command(["nvme", "sanitize-log", str(path), "-o", "json"], True)
+    except EraseProofError as error:
+        sanitize_log = {"sstat": -1, "state": "unknown", "detail": str(error)}
+    format_namespaces = {}
+    if number(identify.get("oacs", 0)) & 2:
+        for identifier in namespace_ids:
+            format_namespaces[str(identifier)] = command(["nvme", "id-ns", str(path), f"--namespace-id={identifier}", "-o", "json"], True)
     return {"kind": "nvme-controller", "path": str(path), "serial": str(identify.get("sn") or "").strip(),
             "model": str(identify.get("mn") or "").strip(), "identify": identify, "namespace_ids": sorted(namespace_ids),
-            "namespaces": namespaces, "sanitize_log": command(["nvme", "sanitize-log", str(path), "-o", "json"], True),
+            "namespaces": namespaces, "sanitize_log": sanitize_log, "format_namespaces": format_namespaces, 'sed': sed,
             "scope": "Controller-wide; affects every namespace. Firmware behavior has not been validated on physical hardware."}
 
 
-def nvme_plan(probe, method, allow_controller, confirmation):
-    if method not in ("block-erase", "crypto-erase"):
-        raise EraseProofError("Supported NVMe sanitize methods: block-erase or crypto-erase.")
+def nvme_gate(probe, allow_controller, confirmation):
     if allow_controller != probe["path"] or not probe["serial"] or confirmation != probe["serial"]:
         raise EraseProofError("Controller allowlist and exact nonempty device serial are required.")
     identify = probe["identify"]
     # Multi-controller/subsystem and fabrics require a wider exclusivity model.
     if "cmic" not in identify or number(identify["cmic"]):
         raise EraseProofError("Multi-port/controller, SR-IOV and shared-subsystem configurations are refused.")
-    bit, action = (1, 2) if method == "block-erase" else (0, 4)
-    if not number(identify.get("sanicap", 0)) & (1 << bit):
-        raise EraseProofError("The controller does not advertise the selected sanitize action.")
     allocated = probe["namespace_ids"]
     if not allocated or allocated != sorted(n["id"] for n in probe["namespaces"]):
         raise EraseProofError("Every allocated namespace must be attached and present in the Linux inventory.")
@@ -99,6 +108,15 @@ def nvme_plan(probe, method, allow_controller, confirmation):
             holders = Path("/sys/class/block")/Path(item["name"]).name/"holders"
             if holders.exists() and any(holders.iterdir()):
                 raise EraseProofError("A namespace is held by another kernel block device.")
+
+
+def nvme_plan(probe, method, allow_controller, confirmation):
+    if method not in ("block-erase", "crypto-erase"):
+        raise EraseProofError("Supported NVMe sanitize methods: block-erase or crypto-erase.")
+    nvme_gate(probe, allow_controller, confirmation)
+    bit, action = (1, 2) if method == "block-erase" else (0, 4)
+    if not number(probe["identify"].get("sanicap", 0)) & (1 << bit):
+        raise EraseProofError("The controller does not advertise the selected sanitize action.")
     status = number(probe["sanitize_log"].get("sstat", -1)) & 7
     if status not in (0, 1, 4):
         raise EraseProofError("Sanitize log is busy, failed or unrecognized; no new command will be submitted.")
@@ -117,13 +135,17 @@ def outside_devices(directory, roots):
         raise EraseProofError("Evidence destination is on a device affected by this operation.")
 
 
-def submit_nvme(controller, method, allow_controller, confirmation, evidence_dir):
+def submit_nvme(controller, method, allow_controller, confirmation, evidence_dir, *, expected_namespaces=None):
     if os.geteuid() != 0:
         raise EraseProofError("NVMe submission requires an explicit root CLI invocation.")
     initial = nvme_probe(controller)
+    if expected_namespaces is not None and digest(initial['namespaces']) != digest(expected_namespaces):
+        raise EraseProofError('Namespace inventory changed from the confirmed workflow; no firmware command sent.')
     prepared = nvme_plan(initial, method, allow_controller, confirmation)
     outside_devices(evidence_dir, [n["device"] for n in initial["namespaces"]])
     store = EvidenceStore(evidence_dir)
+    if not store.check():
+        raise EraseProofError("Audit history is damaged; no firmware command submitted.")
     store.key()
     job = "nvme-"+uuid.uuid4().hex
     with ExitStack() as stack:
@@ -133,9 +155,12 @@ def submit_nvme(controller, method, allow_controller, confirmation, evidence_dir
         fresh = nvme_probe(controller)
         if digest(prepared) != digest(nvme_plan(fresh, method, allow_controller, confirmation)):
             raise EraseProofError("Controller identity or namespaces changed during preparation.")
+        from .nvmeformat import pinned_controller
+        from .firmware import sanitize
+        fd = pinned_controller(controller, stack, prepared['serial'], prepared['model'])
         store.append("firmware.submitting", {"job": job, "plan": prepared, "before_log": initial["sanitize_log"]})
         try:
-            response = command(prepared["command"])
+            response = sanitize(fd, 2 if method == 'block-erase' else 4)
         except BaseException as error:
             store.append("firmware.submission-uncertain", {"job": job, "error": str(error), "instruction": "Read controller sanitize-log; do not assume a timeout cancelled the command."})
             raise
@@ -163,6 +188,13 @@ def probe(path):
         return nvme_probe(str(path))
     info = describe(path)
     result = {"target": info, "recommendation": "logical-overwrite", "physical_assurance": "unverified", "checks": {}}
+    from .encryption import volume_signature, inspect_sed
+    with open_target(path) as stream:
+        result['encrypted_volume'] = volume_signature(stream.read(4096))
+        if info['kind'] == 'block-device':
+            result['sed'] = inspect_sed(stream.fileno())
+    if result['encrypted_volume']['type'] != 'unknown':
+        result['encryption'] = result['encrypted_volume']['type']
     if info["kind"] == "image":
         with open_target(path) as stream:
             header = stream.read(8)
@@ -171,6 +203,17 @@ def probe(path):
             result["recommendation"] = "inspect-keyslots-before-logical-overwrite"
         return result
     _, device = find_device(path)
+    encrypted_partitions = []
+    for partition in list(descendants(device))[:128]:
+        if partition.get('type') != 'part':
+            continue
+        try:
+            with open_target(partition['name']) as stream:
+                signature = volume_signature(stream.read(4096))
+            encrypted_partitions.append({'path': partition['name'], **signature})
+        except (EraseProofError, OSError) as error:
+            encrypted_partitions.append({'path': partition['name'], 'state': 'unknown', 'detail': str(error)})
+    result['partition_encryption'] = encrypted_partitions
     result["transport"] = device.get("tran")
     result["rotational"] = device.get("rota")
     if device.get("tran") == "nvme":
@@ -185,7 +228,12 @@ def probe(path):
         match = re.search(r"max sectors\s*=\s*(\d+)/(\d+)", raw)
         result["hpa"] = {"visible_sectors": int(match[1]), "native_sectors": int(match[2]), "hidden": int(match[1]) < int(match[2])} if match else {"state": "unknown"}
         result["recommendation"] = "review-ATA-capabilities-and-hidden-areas"
-        result["execution"] = "ATA firmware erasure and HPA/DCO changes are not enabled; unknown checks are not treated as absent."
+        try:
+            from .ata import probe as ata_probe
+            result['ata_discovery'] = ata_probe(path)
+        except (EraseProofError, OSError) as error:
+            result['ata_discovery_error'] = str(error)
+        result["execution"] = "ATA commands require an explicit allowlisted root CLI invocation. Hidden-capacity changes require a separately confirmed factory sector count."
     else:
         result["recommendation"] = "visible-range-overwrite-only; flash-hidden-pages-not-proven"
     return result
@@ -212,11 +260,15 @@ def decision(discovery):
                     prepared['scope'])
             except (EraseProofError, ValueError) as error:
                 add('nvme-sanitize-'+method, False, str(error))
-        oacs, fna = number(identify.get('oacs', 0)), number(identify.get('fna', 0))
-        add('nvme-format-crypto', False,
-            'Advertised, but Format NVM execution is not enabled in this release.' if oacs & 2 and fna & 4 else 'Cryptographic Format NVM support was not established.')
-        add('nvme-format-user-data', False,
-            'Advertised, but Format NVM execution is not enabled in this release.' if oacs & 2 else 'Format NVM support was not established.')
+        from .nvmeformat import plan as format_plan
+        for method in ('crypto', 'user-data'):
+            try:
+                prepared = format_plan(discovery, method, discovery['path'], discovery['serial'])
+                add('nvme-format-'+method, True, 'Controller/namespace gates passed; preserves the current sector format.',
+                    ['eraseproof', 'nvme-format-submit', discovery['path'], '--method', method,
+                     '--allow-controller', discovery['path'], '--confirm', discovery['serial'], '--case', 'EVIDENCE_ON_ANOTHER_DEVICE'], prepared['scope'])
+            except EraseProofError as error:
+                add('nvme-format-'+method, False, str(error))
         target = {'path': discovery['path'], 'serial': discovery['serial'], 'model': discovery['model']}
         hidden = {'state': 'controller-scoped', 'detail': 'All allocated namespaces must be visible. HPA/DCO are ATA mechanisms.'}
     else:
@@ -257,9 +309,19 @@ def decision(discovery):
                 else:
                     hidden = {'state': 'unknown', 'hpa': hpa, 'dco_max_sectors': dco}
                 for method in ('ata-sanitize-crypto', 'ata-sanitize-block', 'ata-enhanced-secure-erase'):
-                    add(method, False, 'ATA destructive adapters require spare-hardware validation and are disabled. Raw IDENTIFY responses are retained in discovery.')
+                    from .ata import plan as ata_plan
+                    actual = method.removeprefix('ata-')
+                    try:
+                        if 'ata_discovery' not in discovery:
+                            raise EraseProofError(discovery.get('ata_discovery_error', 'Complete native ATA discovery is required.'))
+                        prepared = ata_plan(discovery['ata_discovery'], actual, target['path'], target['serial'])
+                        add(method, True, 'Native ATA identity, capability and hidden-area gates passed; physical validation remains pending.',
+                            ['eraseproof', 'ata-submit', target['path'], '--method', actual, '--allow-device', target['path'],
+                             '--confirm', target['serial'], '--case', 'EVIDENCE_ON_ANOTHER_DEVICE'], prepared['scope'])
+                    except EraseProofError as error:
+                        add(method, False, str(error))
                 if hidden['state'] in ('hidden', 'unknown'):
-                    blockers.append('ATA hidden capacity is present or unknown. No whole-physical-media erasure claim is permitted; HPA/DCO changes are not automated.')
+                    blockers.append('ATA hidden capacity is present or unknown. Complete native ATA discovery and an explicit factory-capacity expansion plan are required before erasure.')
             if discovery.get('transport') == 'nvme':
                 blockers.append('Inspect the real controller character device to plan controller-wide sanitization; namespace names do not establish controller ownership.')
             if not discovery.get('rotational'):

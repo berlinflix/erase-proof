@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import uuid
 import subprocess
+import shlex
 
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon
@@ -336,7 +337,8 @@ class MainWindow(QMainWindow):
         row.addWidget(self.registered("Scan & recover", self.start_recovery, True))
         settings.addLayout(row)
         row = QHBoxLayout()
-        self.fragments = QCheckBox("PNG gap reconstruction (bounded to 64 KiB)")
+        self.fragments = QCheckBox("Fragment search · PNG / ZIP / PDF / JPEG (bounded)")
+        self.fragments.setToolTip("Search two fragments with a forward gap up to 64 KiB. Checksums validate PNG/ZIP content; PDF/JPEG reconstruction remains uncertain.")
         row.addWidget(self.fragments)
         row.addStretch()
         row.addWidget(self.registered("Independent attack", self.start_independent_attack))
@@ -493,9 +495,24 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         row.addWidget(self.registered("Inspect capabilities", self.inspect_media, True))
         row.addWidget(self.registered("Read NVMe status", self.inspect_nvme_status))
+        row.addWidget(self.registered("Read ATA status", self.inspect_ata_status))
         row.addStretch()
         box.addLayout(row)
         layout.addWidget(discovery)
+        self.media_methods = table(["METHOD", "ELIGIBILITY", "REASON"])
+        self.media_methods.setMinimumHeight(140)
+        self.media_methods.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.media_methods.itemSelectionChanged.connect(self.select_media_method)
+        self.media_rows = []
+        self.media_command = QLineEdit()
+        self.media_command.setReadOnly(True)
+        self.media_command.setPlaceholderText("Select an eligible method to prepare its privileged CLI command")
+        command_row = QHBoxLayout()
+        command_row.addWidget(self.media_command, 1)
+        command_row.addWidget(self.registered("Copy command", self.copy_media_command))
+        layout.addWidget(self.media_methods)
+        layout.addLayout(command_row)
+        self.media_source.textChanged.connect(self.clear_media_methods)
         keyslots, box = panel("Software LUKS2 image", "Remove active keyslots from an unattached LUKS2 image. This leaves ciphertext and external header/key backups outside the operation. A keyslot removal receipt is separate from a verified-overwrite certificate.")
         box.addWidget(self.registered("Remove image keyslots…", self.erase_luks_target))
         layout.addWidget(keyslots)
@@ -509,9 +526,37 @@ class MainWindow(QMainWindow):
         from .media import decision, probe
         path = self.media_source.text().strip()
         def done(result):
+            self.media_rows = result['methods']
+            fill_table(self.media_methods, [(m['method'], 'Available' if m['available'] else 'Blocked', m['reason']) for m in self.media_rows])
             self.media_details.setPlainText(json.dumps(result, indent=2))
             self.status_label.setText("Capability inspection complete. No media command was submitted.")
         self.execute(lambda progress, cancel: decision(probe(path)), done)
+
+    def clear_media_methods(self, *_):
+        self.media_rows = []
+        self.media_methods.setRowCount(0)
+        self.media_command.clear()
+
+    def select_media_method(self):
+        row = self.media_methods.currentRow()
+        self.media_command.clear()
+        if 0 <= row < len(self.media_rows):
+            method = self.media_rows[row]
+            command = method.get('command')
+            if method['available'] and command:
+                prefix = [sys.executable, '--cli'] if getattr(sys, 'frozen', False) else [sys.executable, '-m', 'eraseproof']
+                self.media_command.setText(shlex.join(['sudo', *prefix, *command[1:]]))
+                self.media_command.setToolTip('Choose a real evidence path on another disk before executing. Inspect the complete plan below. Firmware acceptance is not an erasure certificate.')
+
+    def copy_media_command(self):
+        if self.media_command.text():
+            QApplication.clipboard().setText(self.media_command.text())
+            self.status_label.setText('Command copied. Choose the evidence destination and review the exact device/serial before execution.')
+
+    def inspect_ata_status(self):
+        from .ata import probe
+        path = self.media_source.text().strip()
+        self.execute(lambda progress, cancel: probe(path), lambda result: self.media_details.setPlainText(json.dumps(result, indent=2)))
 
     def inspect_nvme_status(self):
         from .media import nvme_status

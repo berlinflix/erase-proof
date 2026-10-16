@@ -22,6 +22,7 @@ class Candidate:
     output: str = ""
     sha256: str = ""
     segments: list[list[int]] = field(default_factory=list)
+    confidence_details: dict = field(default_factory=dict)
 
     def to_dict(self):
         return asdict(self)

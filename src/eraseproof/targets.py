@@ -96,6 +96,33 @@ def describe(path):
     raise EraseProofError("Only regular image files and Linux block devices are supported.")
 
 
+def device_policy(path, confirmation, allow_device):
+    """Explicit privileged visible-range overwrite, after the media safety gate."""
+    if os.geteuid() != 0:
+        raise EraseProofError("Physical/host device writes require an explicit root CLI invocation.")
+    info = describe(path)
+    root, device = find_device(path)
+    if info["kind"] != "block-device" or device is not root or device.get("type") != "disk":
+        raise EraseProofError("Select a complete unmounted disk, not a partition, loop, mapper or mounted system device.")
+    if allow_device != info["path"] or not info["serial"] or confirmation != info["serial"]:
+        raise EraseProofError("A matching device allowlist and exact nonempty serial confirmation are required.")
+    for child in descendants(root):
+        if child.get("ro") or any(child.get("mountpoints") or []):
+            raise EraseProofError("A disk/child is mounted, swap or read-only; the booted system disk is excluded.")
+        holders = Path('/sys/class/block')/Path(child['name']).name/'holders'
+        if holders.exists() and any(holders.iterdir()):
+            raise EraseProofError('The device has active kernel holders.')
+    hidden = {'state': 'not-established', 'scope': 'Host-visible logical range only'}
+    if root.get('tran') in ('sata', 'ata'):
+        from .ata import probe
+        current = probe(path)['ata']
+        if current['visible_sectors'] != current['native_sectors'] or current['native_sectors'] != current['dco_sectors']:
+            raise EraseProofError('Open and re-probe hidden HPA/DCO capacity with an explicit ATA plan before a full disk overwrite.')
+        hidden = {'state': 'no-capacity-reduction-reported', 'ata': current}
+    return {**info, 'kind': 'host-block-device', 'hidden_areas': hidden,
+            'scope': 'Complete host-visible logical range with full readback. Flash translation layers, remapped blocks, hidden USB bridge media and chip-off remanence are not proven.'}
+
+
 def open_target(path, writable=False, *, lock=True):
     flags = os.O_RDWR if writable else os.O_RDONLY
     flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)

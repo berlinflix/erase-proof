@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -14,12 +15,21 @@ from .runtime import system_environment
 
 def usage(root):
     total = files = 0
-    for folder, _, names in os.walk(root):
+    for folder, directories, names in os.walk(root):
+        if any((Path(folder)/name).is_symlink() for name in directories):
+            raise EraseProofError("Recovery worker created an unexpected directory symlink.")
         for name in names:
             path = Path(folder)/name
-            if path.is_symlink():
-                raise EraseProofError("Recovery worker created an unexpected symlink.")
-            total += path.stat().st_size
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                # PhotoRec renames/removes provisional outputs while running.
+                # The final inventory is repeated after the whole process group
+                # stops; a transient disappearance is not an accounting error.
+                continue
+            if not stat.S_ISREG(info.st_mode):
+                raise EraseProofError("Recovery worker created an unexpected symlink or special file.")
+            total += info.st_size
             files += 1
     return total, files
 

@@ -81,7 +81,7 @@ def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
         if stream.read(8) != SIGNATURES[0][0]:
             return None
         pos = offset + 8
-        crc_valid, first, chunks = True, True, 0
+        crc_valid, first, chunks, image_data = True, True, 0, False
         while pos + 12 <= limit and chunks < 100000:
             stream.seek(pos)
             head = stream.read(8)
@@ -92,6 +92,10 @@ def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
                 return None
             if first and (name != b"IHDR" or length != 13):
                 return None
+            if not first and name == b"IHDR":
+                return None
+            if name == b"IDAT" and length:
+                image_data = True
             first = False
             crc = zlib.crc32(name)
             remaining = length
@@ -108,7 +112,7 @@ def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
             pos += length + 12
             chunks += 1
             if name == b"IEND":
-                if length:
+                if length or not image_data:
                     return None
                 return Candidate(offset, pos-offset, kind, 99 if crc_valid else 45,
                                  ["PNG boundaries complete", "Chunk CRCs match" if crc_valid else "CRC mismatch"])
@@ -116,7 +120,7 @@ def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
     return None
 
 
-def reassemble_png(stream, offset, total, maximum_gap=65536):
+def reassemble_png(stream, offset, total, maximum_gap=65536, budget=None):
     # One missing chunk-boundary gap, limited to 64 KiB; no unconstrained
     # permutation search and no claim of arbitrary fragment reconstruction.
     stream.seek(offset)
@@ -142,6 +146,8 @@ def reassemble_png(stream, offset, total, maximum_gap=65536):
     for suffix in range(pos+1, min(len(data)-12, pos+maximum_gap)+1):
         if data[suffix+4:suffix+8] not in (b"IDAT", b"IEND", b"PLTE", b"tEXt", b"iTXt", b"zTXt", b"pHYs", b"gAMA", b"sRGB"):
             continue
+        if budget:
+            budget.take()
         reconstructed = data[:pos]+data[suffix:]
         result = identify(io.BytesIO(reconstructed), 0, "PNG", len(reconstructed), len(reconstructed))
         if result and result.confidence == 99:
@@ -151,9 +157,11 @@ def reassemble_png(stream, offset, total, maximum_gap=65536):
     return None
 
 
-def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=None, length=None, fragmented=False):
+def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=None, length=None, fragmented=False, warnings=None):
     from .matching import Matcher
+    from .fragments import Budget, isolated
     matcher = Matcher([signature for signature, _ in SIGNATURES])
+    fragment_budget = Budget()
     owned = stream is None
     if owned:
         target = describe(path)
@@ -182,9 +190,15 @@ def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=N
                     continue
                 seen.add(at)
                 result = identify(stream, at, kind, length, max_candidate)
-                if fragmented and kind == "PNG" and (not result or result.confidence < 90):
-                    rebuilt = reassemble_png(stream, at, length)
-                    result = rebuilt or result
+                if fragmented and kind in ("PNG", "ZIP", "PDF", "JPEG") and (kind == 'JPEG' or not result or result.confidence < 90):
+                    try:
+                        result = isolated(stream, at, kind, length, fragment_budget, cancel) or result
+                    except EraseProofError as error:
+                        if warnings is None or isinstance(error, Cancelled):
+                            raise
+                        warnings.append(f'{kind} at offset {at}: {error}')
+                        if fragment_budget.attempts <= 0 or __import__('time').monotonic() >= fragment_budget.deadline:
+                            fragmented = False
                 if result:
                     result.name = f"carved_{at:012x}.{kind.lower()}"
                     candidates.append(result)
@@ -242,4 +256,7 @@ def extract(path, candidate, output_dir):
         candidate.confidence = max(candidate.confidence, 98) if candidate.method != "pdf-earlier-revision" else min(candidate.confidence, 55)
     elif validation["status"] == "invalid":
         candidate.confidence = min(candidate.confidence, 35)
+    from .confidence import profile
+    candidate.confidence_details = profile(destination, candidate, validation)
+    candidate.confidence = candidate.confidence_details["score"]
     return candidate

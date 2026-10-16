@@ -10,7 +10,7 @@ import sys
 
 from . import __version__, carve, demo, tsk
 from .engine import erase, plan, verify
-from .evidence import EvidenceStore, verify_record
+from .evidence import EvidenceStore, verify_record, verify_receipt
 from .models import EraseProofError
 from .targets import describe, devices, descendants, find_device
 from .files import plan_files, erase_files
@@ -69,9 +69,21 @@ def recover(path, output, mode="both", sector_offset=0, progress=None, cancel=No
             except EraseProofError as error:
                 warnings.append("Ext4 journal recovery: "+str(error))
     if mode in ("carve", "both"):
-        for candidate in carve.scan(path, progress=progress, cancel=cancel, fragmented=fragmented):
+        for candidate in carve.scan(path, progress=progress, cancel=cancel, fragmented=fragmented, warnings=warnings):
             carve.checkpoint(cancel)
             candidates.append(carve.extract(path, candidate, Path(output)/"carved"))
+    from .confidence import enrich_metadata
+    for candidate in candidates:
+        if not candidate.confidence_details:
+            try:
+                enrich_metadata(candidate, cancel)
+            except (EraseProofError, OSError) as error:
+                from .models import Cancelled
+                if isinstance(error, Cancelled):
+                    raise
+                candidate.confidence = 0
+                candidate.confidence_details = {'score': 0, 'validation': 'unavailable', 'detail': str(error)}
+                warnings.append(candidate.name+': output confidence could not be measured: '+str(error))
     report = {"source": describe(path), "mode": mode, "sector_offset": sector_offset,
               "candidates": [asdict(c) for c in candidates], "warnings": warnings,
               "nonempty_outputs": sum(c.length > 0 for c in candidates),
@@ -104,7 +116,7 @@ def parser():
     rs.add_argument("--output", required=True)
     rs.add_argument("--mode", choices=["deleted", "carve", "both"], default="both")
     rs.add_argument("--sector-offset", type=int, default=0)
-    rs.add_argument("--fragmented-png", action="store_true", help="Attempt one PNG chunk-boundary gap reconstruction within 64 KiB")
+    rs.add_argument("--fragments", "--fragmented-png", dest="fragments", action="store_true", help="Bounded PNG/ZIP/PDF/JPEG bifragment gap reconstruction; checksum-free reconstructions remain uncertain")
     trash_list = sub.add_parser('trash-list', help='List existing Ubuntu Trash items without changing them')
     trash_list.add_argument('--trash-root', help='A Freedesktop Trash store containing files/ and info/; defaults to the current user home Trash')
     trash_recover = sub.add_parser('trash-recover', help='Copy a Trash item to a new output folder; keeps the Trash original')
@@ -161,6 +173,13 @@ def parser():
     worker = sub.add_parser("_validate", help=argparse.SUPPRESS)
     worker.add_argument("path")
     worker.add_argument("family")
+    fragments = sub.add_parser('_fragments', help=argparse.SUPPRESS)
+    fragments.add_argument('fd', type=int)
+    fragments.add_argument('offset', type=int)
+    fragments.add_argument('kind')
+    fragments.add_argument('total', type=int)
+    fragments.add_argument('attempts', type=int)
+    fragments.add_argument('seconds', type=float)
     attack = sub.add_parser("attack", help="Run independent PhotoRec and Sleuth Kit checks, preserving errors and extracted evidence")
     attack.add_argument("target")
     attack.add_argument("--output", required=True)
@@ -182,6 +201,53 @@ def parser():
             operation.add_argument("--case", required=True)
     status = sub.add_parser("nvme-status", help="Read controller sanitize status; firmware jobs continue independently of this process")
     status.add_argument("controller")
+    for name in ("nvme-format-plan", "nvme-format-submit"):
+        operation = sub.add_parser(name, help="Plan or execute Format NVM secure erase of every namespace, preserving sector formats")
+        operation.add_argument("controller")
+        operation.add_argument("--method", choices=["crypto", "user-data"], required=True)
+        operation.add_argument("--allow-controller", required=True)
+        operation.add_argument("--confirm", required=True)
+        if name.endswith("submit"):
+            operation.add_argument("--case", required=True)
+    for name in ('nvme-workflow-plan', 'nvme-run'):
+        operation = sub.add_parser(name, help='Plan or run a bounded controller-wide erase/attack/escalate/certify workflow')
+        operation.add_argument('controller')
+        operation.add_argument('--methods', nargs='+', choices=['crypto-erase', 'block-erase', 'format-crypto', 'format-user-data'], required=True)
+        operation.add_argument('--allow-controller', required=True)
+        operation.add_argument('--confirm', required=True)
+        if name == 'nvme-run':
+            operation.add_argument('--case', required=True)
+            operation.add_argument('--references', required=True)
+            operation.add_argument('--timeout', type=int, default=3600)
+    for name in ("ata-plan", "ata-submit"):
+        operation = sub.add_parser(name, help="Plan/execute allowlisted ATA sanitize, enhanced erase or explicit HPA/DCO opening")
+        operation.add_argument("target")
+        operation.add_argument("--method", choices=["sanitize-crypto", "sanitize-block", "enhanced-secure-erase", "open-hidden"], required=True)
+        operation.add_argument("--allow-device", required=True)
+        operation.add_argument("--confirm", required=True)
+        operation.add_argument("--open-hidden", action="store_true")
+        operation.add_argument("--capacity-sectors", type=int)
+        if name.endswith("submit"):
+            operation.add_argument("--case", required=True)
+    ata_status = sub.add_parser("ata-status", help="Read ATA identity, hidden capacity and sanitize/security state")
+    ata_status.add_argument("target")
+    security_recover = sub.add_parser("ata-recover-security", help="Explicitly unlock/disable the saved temporary ATA password after an interrupted erase")
+    security_recover.add_argument("target")
+    security_recover.add_argument("--allow-device", required=True)
+    security_recover.add_argument("--confirm", required=True)
+    security_recover.add_argument("--recovery-key", required=True)
+    security_recover.add_argument("--case", required=True)
+    for name in ("device-plan", "device-erase", "device-discard"):
+        operation = sub.add_parser(name, help="Explicit privileged whole host-visible disk operation; boot/mounted/holder gates apply")
+        operation.add_argument("target")
+        operation.add_argument("--allow-device", required=True)
+        operation.add_argument("--confirm", required=True)
+        if name != "device-plan":
+            operation.add_argument("--case", required=True)
+        if name == "device-erase":
+            operation.add_argument("--references")
+        if name == "device-discard":
+            operation.add_argument("--secure", action="store_true")
     luks = sub.add_parser("luks-erase", help="Remove active software LUKS2 image keyslots; ciphertext/backups remain outside this operation")
     luks.add_argument("image")
     luks.add_argument("--confirm", required=True)
@@ -197,12 +263,17 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         status = 0
+        if args.command == '_fragments':
+            from .fragments import worker
+            worker(args.fd, args.offset, args.kind, args.total, args.attempts, args.seconds)
+            return 0
         if args.command == "desktop":
             from .desktop import main as desktop
             return desktop()
         if args.command == "doctor":
             from .nativeio import library
             from .independent import bulk_tool
+            from .fingerprints import library as fuzzy_library
             output = {"version": __version__, "platform": platform.platform(), "python": sys.version.split()[0],
                       "tools": {name: shutil.which(name) for name in ("lsblk", "losetup", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm", "e2fsck", "ntfsfix", "ntfsresize", "ntfswipe", "fsck.exfat", "cryptsetup", "prlimit")},
                       "native_direct_io": library() is not None,
@@ -210,10 +281,39 @@ def main(argv=None):
                       "offline_ntfs_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ntfs").is_file(),
                       "offline_exfat_adapter": True,
                       "bulk_extractor": bulk_tool(),
+                      'ssdeep_streaming': fuzzy_library() is not None,
+                      'native_firmware_adapter': (Path(__file__).parent/'resources/native/liberaseproof_firmware.so').is_file(),
+                      'strict_jpeg_fragment_validator': (Path(__file__).parent/'resources/native/liberaseproof_jpeg.so').is_file(),
                       "ext4_journal_reader": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4-journal").is_file(),
-                      "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
+                      "physical_device_sanitization": "guarded NVMe/ATA/Format/HPA/DCO and host-range adapters; physical firmware behavior remains unverified", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":
             output = devices()
+        elif args.command in ("nvme-format-plan", "nvme-format-submit"):
+            from . import nvmeformat, media
+            output = (nvmeformat.submit(args.controller, args.method, args.allow_controller, args.confirm, args.case)
+                      if args.command.endswith("submit") else nvmeformat.plan(media.nvme_probe(args.controller), args.method, args.allow_controller, args.confirm))
+        elif args.command in ('nvme-workflow-plan', 'nvme-run'):
+            from . import workflow, media
+            output = (workflow.plan(media.nvme_probe(args.controller), args.methods, args.allow_controller, args.confirm)
+                      if args.command.endswith('plan') else workflow.run(args.controller, args.methods, args.allow_controller,
+                        args.confirm, args.case, references(args.references), timeout=args.timeout, progress=progress))
+        elif args.command == "ata-status":
+            from .ata import probe
+            output = probe(args.target)
+        elif args.command == "device-plan":
+            output = plan(args.target, args.allow_device, args.confirm, host_device=True)
+        elif args.command == "device-erase":
+            output = erase(args.target, args.confirm, args.case, references(args.references), args.allow_device, progress, host_device=True)
+        elif args.command == "device-discard":
+            from .device import discard
+            output = discard(args.target, args.allow_device, args.confirm, args.case, args.secure)
+        elif args.command == "ata-recover-security":
+            from .ata import recover_security
+            output = recover_security(args.target, args.allow_device, args.confirm, args.recovery_key, args.case)
+        elif args.command in ("ata-plan", "ata-submit"):
+            from . import ata
+            output = (ata.submit(args.target, args.method, args.allow_device, args.confirm, args.case, args.open_hidden, args.capacity_sectors)
+                      if args.command.endswith("submit") else ata.plan(ata.probe(args.target), args.method, args.allow_device, args.confirm, args.open_hidden, args.capacity_sectors))
         elif args.command == "fingerprint":
             from .fingerprints import measure
             from .targets import open_target
@@ -229,7 +329,7 @@ def main(argv=None):
         elif args.command == "demo":
             output = demo.create(args.directory, args.deleted) if args.action == "create" else demo.delete(args.directory)
         elif args.command == "recover":
-            output = recover(args.target, args.output, args.mode, args.sector_offset, progress, fragmented=args.fragmented_png)
+            output = recover(args.target, args.output, args.mode, args.sector_offset, progress, fragmented=args.fragments)
         elif args.command == 'trash-list':
             from .trash import listing
             output = listing(args.trash_root)
@@ -253,8 +353,9 @@ def main(argv=None):
                 record = attached_record(args.file)
             else:
                 record = json.loads(Path(args.file).read_text())
-            valid = verify_record(record)
-            trusted = verify_record(record, args.trusted_fingerprint) if args.trusted_fingerprint is not None else None
+            validator = verify_receipt if record.get('payload', {}).get('schema') == 'eraseproof.firmware-receipt.v1' else verify_record
+            valid = validator(record)
+            trusted = validator(record, args.trusted_fingerprint) if args.trusted_fingerprint is not None else None
             output = {"signature_valid": valid, "trusted_signer": trusted, "signer_fingerprint": record.get("signer_fingerprint"),
                       "identity": "matched expected signer" if trusted else "operator identity not established", "pdf_wrapper_authenticated": False}
             status = 0 if valid and trusted is not False else 2

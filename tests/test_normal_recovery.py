@@ -43,12 +43,17 @@ def test_one_failed_metadata_entry_does_not_stop_other_recovery(tmp_path, monkey
         if candidate.inode == "1":
             raise EraseProofError("allocation metadata destroyed")
         candidate.method = "sleuthkit-metadata"
+        destination.mkdir(parents=True, exist_ok=True)
+        output = destination/'survivor.custom'
+        output.write_bytes(os.urandom(candidate.length))
+        candidate.output = str(output)
         return candidate
     monkeypatch.setattr(cli.tsk, "recover", extract)
     report = recover(source, tmp_path/"out", "deleted")
     assert report["nonempty_outputs"] == 1
     assert report["candidates"][0]["name"] == "survivor.custom"
     assert "allocation metadata destroyed" in report["warnings"][0]
+    assert report['candidates'][0]['confidence_details']['entropy_bits_per_byte'] > 0
 
 
 def test_jpeg_thumbnail_footer_does_not_truncate_main_photo(tmp_path):

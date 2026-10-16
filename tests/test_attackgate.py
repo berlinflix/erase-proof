@@ -17,6 +17,23 @@ from eraseproof.matching import Matcher
 from eraseproof.models import Cancelled, EraseProofError
 
 
+def test_output_accounting_handles_provisional_file_rename_and_refuses_symlink(tmp_path, monkeypatch):
+    provisional = tmp_path/'provisional.jpg'
+    provisional.write_bytes(b'being-renamed')
+    original = Path.lstat
+    def disappearing(path, *args, **kwargs):
+        if path == provisional:
+            raise FileNotFoundError(path)
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'lstat', disappearing)
+    assert external.usage(tmp_path) == (0, 0)
+    monkeypatch.setattr(Path, 'lstat', original)
+    provisional.unlink()
+    (tmp_path/'bad').symlink_to('/etc/passwd')
+    with pytest.raises(EraseProofError, match='symlink'):
+        external.usage(tmp_path)
+
+
 def test_actual_independent_recovery_finds_target_and_preserves_unrelated_findings(tmp_path):
     manifest = demo.create(tmp_path/"experiment", delete_files=True)
     image = Path(manifest["image"])

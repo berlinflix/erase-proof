@@ -69,6 +69,12 @@ for package in sorted(system_packages):
         destination.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(copyright_file, destination/"copyright")
 shutil.copytree("/usr/share/common-licenses", binary/"THIRD-PARTY-LICENSES"/"Common-license-texts", dirs_exist_ok=True)
+for package in ('libfuzzy2', 'libjpeg-turbo8'):
+    notice = Path('/usr/share/doc')/package/'copyright'
+    if notice.is_file():
+        destination = binary/'THIRD-PARTY-LICENSES'/'Ubuntu-libraries'/package
+        destination.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(notice, destination/'copyright')
 versions = [f"{distribution.metadata['Name']}=={distribution.version}" for distribution in importlib.metadata.distributions()
             if distribution.metadata.get("Name") != "eraseproof"]
 (binary/"BUILD-PACKAGES.txt").write_text("\n".join(sorted(set(versions)))+"\n")
@@ -112,8 +118,9 @@ NVMe command submission is a separate guarded privileged CLI adapter, with
 audited receipts rather than physical-erasure certificates. LUKS2 image
 keyslot removal is supported. See source docs/MEDIA.md and docs/EVIDENCE.md.
 The media planner reports actual executable support and unknown hidden capacity.
-ATA destructive commands, Format NVM, HPA/DCO changes, snapshots and physical
-flash-remanence assurance are outside this release's verified scope.
+ATA/Format/HPA/DCO adapters implement explicit device, serial and state gates.
+Physical firmware behavior, snapshots and chip-off flash-remanence assurance
+remain outside the validated software evidence.
 Secondary virtual-disk writes are gated by a path/serial policy and require
 separate VirtualBox acceptance testing. Begin with the image experiment.
 

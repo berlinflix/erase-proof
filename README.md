@@ -6,7 +6,8 @@ Target: **Ubuntu x86-64 in Oracle VirtualBox**. Development and automated testin
 
 Get the application and optional bootable ISO from
 [GitHub Releases](https://github.com/berlinflix/erase-proof/releases).
-The [0.11 release guide](docs/RELEASE-0.11.md) covers installation, features,
+The [0.12 continuation guide](docs/RELEASE-0.12.md) and
+[0.11 preview release guide](docs/RELEASE-0.11.md) cover installation, features,
 validation and the physical-media research boundaries.
 
 ## Run the source distribution in Ubuntu
@@ -99,7 +100,12 @@ inventory, and separately gated ioctl primitives. Actual I/O counts are recorded
 
 The native carver recognizes PNG, PDF, JPEG, ZIP/Office, GIF, BMP, WAV/AVI, Ogg, MP4, SQLite, RTF, ELF, 7z, gzip and tar. Image decoding, strict PDF parsing, SQLite quick-check and ZIP CRC validation run in separate processes with CPU, memory and time limits. Other families report container-level checks; a score is an evidence heuristic, not a probability. Files are never executed. Candidates are limited to 256 MiB.
 
-`--fragmented-png` reconstructs one PNG gap at a chunk boundary within 64 KiB and checks all reconstructed CRCs. Arbitrary fragmentation remains outside this algorithm.
+`--fragments` (also accepting the earlier `--fragmented-png` spelling) adds bounded
+PNG/ZIP/PDF/JPEG bifragment search. It uses complete checksums where available,
+decoder diagnostics and structural offsets. Reconstruction without a checksum
+remains uncertain. See the public corpus measurements and search limits in the
+[0.12 guide](docs/RELEASE-0.12.md). Arbitrary fragmentation remains outside the
+algorithm's guarantee.
 
 ```bash
 eraseproof partitions /path/to/disk.img

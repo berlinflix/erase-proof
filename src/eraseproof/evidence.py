@@ -94,6 +94,20 @@ class EvidenceStore:
     def certify(self, payload):
         if not payload.get("verification", {}).get("passed"):
             raise EraseProofError("A failed verification cannot be certified.")
+        verification = payload['verification']
+        rrs = verification.get('rrs')
+        if rrs is not None:
+            import math
+            if isinstance(rrs, bool) or not isinstance(rrs, (int, float)) or not math.isfinite(rrs):
+                raise EraseProofError('Residual recoverability must be a finite numeric measurement.')
+        if verification.get('rrs') is not None and verification['rrs'] != 0:
+            raise EraseProofError('Residual recoverability is nonzero; an erasure certificate is forbidden.')
+        certificate = verification.get('rrs') == 0 and verification.get('independent_attack', {}).get('passed') is True
+        payload = {**payload, 'document_type': 'erasure-certificate' if certificate else 'operation-receipt',
+                   'certificate_issued': certificate}
+        from .standards import mapping
+        method = payload.get('operation', payload.get('plan', {}).get('method', 'logical-scope-verification'))
+        payload = {**payload, 'standard_mapping': mapping(method)}
         with self.connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             if not self.check(connection):
@@ -207,3 +221,7 @@ def verify_signed(record, schema, trusted_fingerprint=None):
 
 def verify_record(record, trusted_fingerprint=None):
     return verify_signed(record, "eraseproof.native-evidence.v1", trusted_fingerprint)
+
+
+def verify_receipt(record, trusted_fingerprint=None):
+    return verify_signed(record, 'eraseproof.firmware-receipt.v1', trusted_fingerprint)

@@ -24,7 +24,18 @@ def library():
     lib.ep_fiemap.argtypes = [ctypes.c_int, ctypes.c_uint64, ctypes.c_uint32,
                              ctypes.POINTER(Extent), ctypes.POINTER(ctypes.c_uint32)]
     lib.ep_fiemap.restype = ctypes.c_int
+    lib.ep_discard.argtypes = [ctypes.c_int, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_int]
+    lib.ep_discard.restype = ctypes.c_int
     return lib
+
+
+def discard(fd, length, secure=False):
+    lib = library()
+    if lib is None:
+        raise EraseProofError('Native discard adapter missing.')
+    error = lib.ep_discard(fd, 0, length, int(secure))
+    if error:
+        raise EraseProofError('Discard failed: '+os.strerror(error))
 
 
 def zero(fd, offset, length, *, direct=True):

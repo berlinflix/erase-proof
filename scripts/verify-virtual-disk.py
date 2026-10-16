@@ -24,6 +24,7 @@ parser.add_argument('iso', type=Path)
 parser.add_argument('--kernel', type=Path, required=True)
 parser.add_argument('--initrd', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--protocol', choices=['ide-overwrite', 'nvme-format'], default='ide-overwrite')
 args = parser.parse_args()
 if not all(p.is_file() for p in (args.iso, args.kernel, args.initrd)):
     parser.error('Provide the built ISO, kernel and initrd. No target device argument is supported.')
@@ -80,6 +81,39 @@ try:
         assert checksum(path) == configuration['before_sha256'], 'Read-only recovery changed the source.'
         references = root/'references.json'
         references.write_text(json.dumps(configuration['references']))
+        if configuration['protocol'] == 'nvme-format':
+            controllers = [p for p in Path('/sys/class/nvme').iterdir()
+                           if (p/'serial').read_text().strip() == configuration['serial']]
+            assert len(controllers) == 1
+            controller = '/dev/'+controllers[0].name
+            planned = cli('nvme-format-plan', controller, '--method', 'user-data', '--allow-controller', controller,
+                          '--confirm', configuration['serial'])
+            assert all(c['ses'] == 1 for c in planned['commands'])
+            receipt = cli('nvme-format-submit', controller, '--method', 'user-data', '--allow-controller', controller,
+                          '--confirm', configuration['serial'], '--case', root/'evidence')
+            assert receipt['payload']['state'] == 'firmware-reports-completion'
+            assert not receipt['payload']['certificate_issued']
+            receipt_path = root/'receipt.json'
+            receipt_path.write_text(json.dumps(receipt))
+            assert cli('record', receipt_path, '--trusted-fingerprint', receipt['signer_fingerprint'])['trusted_signer']
+            # Check Format's own result before any subsequent overwrite. This
+            # cannot be manufactured by exercising the existing overwrite path.
+            assert checksum(path) == configuration['expected_zero_sha256']
+            result = cli('verify', path, '--references', references)
+            assert result['passed'] and result['rrs'] == 0
+            attacked = cli('attack', path, '--output', root/'post-format-attack')
+            assert attacked['recovered_files'] == 0
+            tools = {t['tool']: t['status'] for t in attacked['tools']}
+            assert tools['PhotoRec'] == tools['bulk_extractor'] == 'completed'
+            report = {'passed': True, 'protocol': 'nvme-format', 'source_recovery_exact': True,
+                      'device_model': device['model'], 'serial': configuration['serial'],
+                      'recovery_source_unchanged': True, 'native_format_ioctl': True,
+                      'format_ses': 1, 'format_full_zero_readback': True,
+                      'signed_receipt_valid': True, 'firmware_receipt_certificate_issued': False,
+                      'independent_tools': tools,
+                      'audit_intact': cli('audit', root/'evidence')['intact']}
+            print('RESULT_MARKER'+json.dumps(report, separators=(',', ':')), flush=True)
+            raise SystemExit(0)
         erased = cli('erase', path, '--allow-device', path, '--confirm', configuration['serial'],
                      '--references', references, '--case', root/'evidence')
         record = erased['record']
@@ -114,7 +148,8 @@ with tempfile.TemporaryDirectory(prefix='eraseproof-qemu-block-') as temporary:
     run('mcopy', '-i', image, original, '::/'+name)
     run('mdel', '-i', image, '::/'+name)
     data = original.read_bytes()
-    configuration = {'serial': 'EPQA'+uuid.uuid4().hex[:12], 'size': size,
+    configuration = {'serial': 'EPQA'+uuid.uuid4().hex[:12], 'size': size, 'protocol': args.protocol,
+                     'expected_zero_sha256': hashlib.sha256(bytes(size)).hexdigest(),
                      'before_sha256': sha(image), 'original_sha256': sha(original),
                      'references': {'block_size': 512,
                          'block_hashes': sorted({hashlib.sha256(data[n:n+512]).hexdigest() for n in range(0, len(data)-511, 512)}),
@@ -134,7 +169,8 @@ with tempfile.TemporaryDirectory(prefix='eraseproof-qemu-block-') as temporary:
                '-nic', 'none', '-no-reboot', '-serial', 'stdio', '-monitor', 'none',
                '-cdrom', str(args.iso.resolve()),
                '-drive', f'file={image},format=raw,if=none,id=epdisk',
-               '-device', f'ide-hd,drive=epdisk,bus=ide.0,unit=0,serial={configuration["serial"]}',
+               '-device', (f'nvme,drive=epdisk,serial={configuration["serial"]}' if args.protocol == 'nvme-format'
+                           else f'ide-hd,drive=epdisk,bus=ide.0,unit=0,serial={configuration["serial"]}'),
                '-kernel', str(args.kernel.resolve()), '-initrd', str(args.initrd.resolve()),
                '-append', 'boot=casper quiet username=eraseproof hostname=eraseproof noprompt noeject '
                           'systemd.debug_shell=ttyS0 systemd.mask=serial-getty@ttyS0.service console=tty0 console=ttyS0,115200n8']

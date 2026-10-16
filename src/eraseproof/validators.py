@@ -4,6 +4,16 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from functools import lru_cache
+
+
+@lru_cache(maxsize=1)
+def sqlite_library():
+    import ctypes
+    library = ctypes.CDLL(str(Path(__file__).parent/'resources/native/liberaseproof_sqlite.so'))
+    library.ep_sqlite_valid.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
+    library.ep_sqlite_valid.restype = ctypes.c_int
+    return library
 
 
 def check(path, family):
@@ -35,8 +45,13 @@ def check(path, family):
                 tuple(page.mediabox)
             return {"status": "valid", "detail": "PDF xref/object/page graph parsed in strict mode"}
         if family == "SQLITE":
+            if str(path).startswith('/proc/self/fd/'):
+                library = sqlite_library()
+                data = Path(path).read_bytes()
+                valid = bool(library.ep_sqlite_valid(data, len(data)))
+                return {'status': 'valid' if valid else 'invalid', 'detail': 'SQLite immutable in-memory quick_check after privilege drop'}
             import sqlite3
-            with sqlite3.connect(Path(path).resolve().as_uri()+"?mode=ro&immutable=1", uri=True) as db:
+            with sqlite3.connect(Path(path).absolute().as_uri()+"?mode=ro&immutable=1", uri=True) as db:
                 rows = db.execute("PRAGMA quick_check").fetchall()
             return {"status": "valid" if rows == [("ok",)] else "invalid", "detail": "SQLite quick_check: "+str(rows[:3])}
         if family in ("ZIP", "DOCX", "XLSX", "PPTX"):
@@ -70,9 +85,50 @@ def isolated(path, family):
 
 def worker(path, family):
     import resource
+    import stat
     resource.setrlimit(resource.RLIMIT_AS, (768*1024*1024, 768*1024*1024))
     resource.setrlimit(resource.RLIMIT_CPU, (6, 6))
-    print(json.dumps(check(path, family)))
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    anonymous = None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 256*1024*1024:
+            raise ValueError('Validation source must be an ordinary bounded candidate file')
+        if os.geteuid() == 0:
+            # A sealed anonymous copy permits parsing private evidence without
+            # granting the codec worker root or filesystem write privileges.
+            import fcntl
+            from PIL import Image
+            from pypdf import PdfReader
+            import zipfile
+            import sqlite3
+            sqlite_library()
+            Image.init()
+            anonymous = os.memfd_create('eraseproof-parser', os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING)
+            while data := os.read(fd, 4*1024*1024):
+                view = memoryview(data)
+                while view:
+                    written = os.write(anonymous, view)
+                    if not written:
+                        raise OSError('Short parser copy write')
+                    view = view[written:]
+            os.fchmod(anonymous, 0o444)
+            fcntl.fcntl(anonymous, fcntl.F_ADD_SEALS, fcntl.F_SEAL_SEAL | fcntl.F_SEAL_SHRINK | fcntl.F_SEAL_GROW | fcntl.F_SEAL_WRITE)
+            path = f'/proc/self/fd/{anonymous}'
+            os.close(fd)
+            fd = -1
+            os.setgroups([])
+            os.setgid(65534)
+            os.setuid(65534)
+        print(json.dumps(check(path, family)))
+    except Exception as error:
+        print(json.dumps({'status': 'bounded', 'detail': str(error)[:300]}))
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        if anonymous is not None:
+            os.close(anonymous)
 
 
 if __name__ == "__main__":

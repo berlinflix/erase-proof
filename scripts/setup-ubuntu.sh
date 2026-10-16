@@ -7,6 +7,7 @@ if [[ "$(uname -s)" != Linux ]]; then
 fi
 echo "Installing the Ubuntu runtime and real forensic/demo tools."
 sudo apt-get update
+sudo apt-get install -y libjpeg-dev libsqlite3-dev
 sudo apt-get install -y python3 python3-venv python3-pip build-essential libfuzzy-dev ssdeep foremost libext2fs-dev ntfs-3g-dev e2fsprogs ntfs-3g exfatprogs exfat-fuse ffmpeg p7zip-full xdg-utils dosfstools mtools sleuthkit testdisk nvme-cli hdparm cryptsetup-bin \
   curl autoconf automake flex libtool pkg-config libabsl-dev libexpat1-dev libgcrypt20-dev libgpg-error-dev libre2-dev libssl-dev zlib1g-dev \
   libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-xinerama0 \

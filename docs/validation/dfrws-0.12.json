@@ -1,0 +1,592 @@
+{
+  "corpus": "DFRWS 2006",
+  "source": "https://github.com/dfrws/dfrws2006-challenge",
+  "image_sha256": "9d24547c9d8a17602ee5a8ecf960ff8cc2ee48575ffc127cd084b3b0a484d1dd",
+  "ground_truth_archive_sha256": "5629d0ad5583bc2e51554a53d3d068c480fd81774bfccd73f3bf39ccbe13b8c8",
+  "source_unchanged": true,
+  "truth_files": 32,
+  "truth_types": {
+    "1a.html": ".html",
+    "1b.html": ".html",
+    "1b.jpg": ".jpg",
+    "1c.html": ".html",
+    "1c.txt": ".txt",
+    "1d1.html": ".html",
+    "1d2.html": ".html",
+    "2a.doc": ".doc",
+    "2b.doc": ".doc",
+    "2c.xls": ".xls",
+    "2d.doc": ".doc",
+    "2d.jpg": ".jpg",
+    "2e.doc": ".doc",
+    "2e.txt": ".txt",
+    "3a.jpg": ".jpg",
+    "3b.jpg": ".jpg",
+    "3c.jpg": ".jpg",
+    "3d.jpg": ".jpg",
+    "3d.txt": ".txt",
+    "3e.doc": ".doc",
+    "3e.jpg": ".jpg",
+    "3f.jpg": ".jpg",
+    "3g1.jpg": ".jpg",
+    "3g2.jpg": ".jpg",
+    "3h1.jpg": ".jpg",
+    "3h2.jpg": ".jpg",
+    "3i.jpg": ".jpg",
+    "3j.jpg": ".jpg",
+    "4a.zip": ".zip",
+    "4b.html": ".html",
+    "4b.zip": ".zip",
+    "4c.zip": ".zip"
+  },
+  "results": {
+    "EraseProof-contiguous": {
+      "outputs": 16,
+      "exact_originals": [
+        "1b.jpg",
+        "2d.jpg",
+        "3a.jpg",
+        "3b.jpg",
+        "3c.jpg",
+        "3g2.jpg",
+        "3i.jpg",
+        "4a.zip"
+      ],
+      "exact_original_count": 8,
+      "exact_original_recall_all_32": 0.25,
+      "exact_original_output_precision": 0.5,
+      "nonexact_outputs": 8,
+      "findings": [
+        {
+          "sha256": "4d09b003550f210dd77ada37c08026f92a2a6db522b8ba3726dea85e00ae5355",
+          "bytes": 287186,
+          "ground_truth_exact": "3a.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "5501d5361e3cf800a8c8750a519ad29723b087f5470eef28a67cf158976fa11c",
+          "bytes": 6428,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "8e036fa838def99d95aea2e5780df34cd1b2b28302a010e60c8a030377c45919",
+          "bytes": 608703,
+          "ground_truth_exact": "2d.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "037f19cec010cafe4f36476fae71dcee88d0fe225e6fd28742b18abfa2335f07",
+          "bytes": 1789,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "da8bd3d361bf4844c47a39453fbe2338def0571aee2b839b8de3a276ea061533",
+          "bytes": 7113968,
+          "ground_truth_exact": "3b.jpg",
+          "confidence": 35
+        },
+        {
+          "sha256": "e30ec1bf9236dcaa920da5a1dc4ec00219b344929e1caf0c6089e4dbdbd76fab",
+          "bytes": 189534,
+          "ground_truth_exact": "1b.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "12480cd0b022b38e97088020298931b8ffb19c2aaedbc4da0647aa42fef9f41d",
+          "bytes": 147150,
+          "ground_truth_exact": "4a.zip",
+          "confidence": 98
+        },
+        {
+          "sha256": "89983268154c37ee6825b6ee07db044e0e5e08c33c49c59e62859067c1b85930",
+          "bytes": 181298,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "828914a2ea3140d55176e663fec3ca956bd9a9216e2106824a899191244c0ab0",
+          "bytes": 71020,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "f587b753bc84b5ca1fc6e81bef67caa23ada58edd4e232166c35677d2aee1b02",
+          "bytes": 19893,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "0bb33b83083be8780c314f355992a21e4d01817ca2a3915ca815da94f8a3ae57",
+          "bytes": 74488,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "5b4425d3de9a334be3edde1600d0ac77fd228d9153e0d759a330d4fbf60d4b29",
+          "bytes": 178659,
+          "ground_truth_exact": "3c.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "2c0ab159dabd04349d80105dc005c0b0ebe0e2f18ec6e7410856d488c1dbf465",
+          "bytes": 304413,
+          "ground_truth_exact": "3g2.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "5d0ed6f9b6e59d90e23b549ab9558d9872df1ec302cd0847495debb9e32e546d",
+          "bytes": 6600,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "f49edfe8e6919bcf85feb07786dcef46cceec51e462c1faf18ece912bc2c26de",
+          "bytes": 24538540,
+          "ground_truth_exact": "3i.jpg",
+          "confidence": 35
+        },
+        {
+          "sha256": "6e9f2fff0af2550579c2ef71104fb2a47abdf3d48144d88bd8824250219ec1ac",
+          "bytes": 400898,
+          "ground_truth_exact": null,
+          "confidence": 98
+        }
+      ],
+      "precision_scope": "Exact original-file hashes only. Embedded members, valid partials and altered originals count as nonexact; this is stricter than semantic file validity.",
+      "seconds": 23.24328778400013,
+      "status": "completed"
+    },
+    "EraseProof-fragments": {
+      "outputs": 17,
+      "exact_originals": [
+        "1b.jpg",
+        "2d.jpg",
+        "3a.jpg",
+        "3b.jpg",
+        "3c.jpg",
+        "3d.jpg",
+        "3f.jpg",
+        "3g2.jpg",
+        "3i.jpg",
+        "4a.zip"
+      ],
+      "exact_original_count": 10,
+      "exact_original_recall_all_32": 0.3125,
+      "exact_original_output_precision": 0.5882352941176471,
+      "nonexact_outputs": 7,
+      "findings": [
+        {
+          "sha256": "4d09b003550f210dd77ada37c08026f92a2a6db522b8ba3726dea85e00ae5355",
+          "bytes": 287186,
+          "ground_truth_exact": "3a.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "5501d5361e3cf800a8c8750a519ad29723b087f5470eef28a67cf158976fa11c",
+          "bytes": 6428,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "8e036fa838def99d95aea2e5780df34cd1b2b28302a010e60c8a030377c45919",
+          "bytes": 608703,
+          "ground_truth_exact": "2d.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "99643a5e220e2c3b7078d4f32d741921d080142503547b0de9327e0998cd4e3d",
+          "bytes": 190720,
+          "ground_truth_exact": "3d.jpg",
+          "confidence": 60
+        },
+        {
+          "sha256": "da8bd3d361bf4844c47a39453fbe2338def0571aee2b839b8de3a276ea061533",
+          "bytes": 7113968,
+          "ground_truth_exact": "3b.jpg",
+          "confidence": 35
+        },
+        {
+          "sha256": "e30ec1bf9236dcaa920da5a1dc4ec00219b344929e1caf0c6089e4dbdbd76fab",
+          "bytes": 189534,
+          "ground_truth_exact": "1b.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "12480cd0b022b38e97088020298931b8ffb19c2aaedbc4da0647aa42fef9f41d",
+          "bytes": 147150,
+          "ground_truth_exact": "4a.zip",
+          "confidence": 98
+        },
+        {
+          "sha256": "89983268154c37ee6825b6ee07db044e0e5e08c33c49c59e62859067c1b85930",
+          "bytes": 181298,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "828914a2ea3140d55176e663fec3ca956bd9a9216e2106824a899191244c0ab0",
+          "bytes": 71020,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "f587b753bc84b5ca1fc6e81bef67caa23ada58edd4e232166c35677d2aee1b02",
+          "bytes": 19893,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "0bb33b83083be8780c314f355992a21e4d01817ca2a3915ca815da94f8a3ae57",
+          "bytes": 74488,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "5b4425d3de9a334be3edde1600d0ac77fd228d9153e0d759a330d4fbf60d4b29",
+          "bytes": 178659,
+          "ground_truth_exact": "3c.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "5b4bbe2c1dd1e56ad37c069b55b68dd500c647c8f7de97f064fd4b09d80bda8d",
+          "bytes": 487473,
+          "ground_truth_exact": "3f.jpg",
+          "confidence": 60
+        },
+        {
+          "sha256": "2c0ab159dabd04349d80105dc005c0b0ebe0e2f18ec6e7410856d488c1dbf465",
+          "bytes": 304413,
+          "ground_truth_exact": "3g2.jpg",
+          "confidence": 98
+        },
+        {
+          "sha256": "5d0ed6f9b6e59d90e23b549ab9558d9872df1ec302cd0847495debb9e32e546d",
+          "bytes": 6600,
+          "ground_truth_exact": null,
+          "confidence": 98
+        },
+        {
+          "sha256": "f49edfe8e6919bcf85feb07786dcef46cceec51e462c1faf18ece912bc2c26de",
+          "bytes": 24538540,
+          "ground_truth_exact": "3i.jpg",
+          "confidence": 35
+        },
+        {
+          "sha256": "6e9f2fff0af2550579c2ef71104fb2a47abdf3d48144d88bd8824250219ec1ac",
+          "bytes": 400898,
+          "ground_truth_exact": null,
+          "confidence": 98
+        }
+      ],
+      "precision_scope": "Exact original-file hashes only. Embedded members, valid partials and altered originals count as nonexact; this is stricter than semantic file validity.",
+      "seconds": 71.02222381999991,
+      "status": "completed-with-search-limits",
+      "error": null,
+      "warnings": [
+        "JPEG at offset 6257664: Bifragment search resource limit reached. Recovery is incomplete; narrow the source range or disable fragment search.",
+        "ZIP at offset 14709248: Bifragment search resource limit reached. Recovery is incomplete; narrow the source range or disable fragment search.",
+        "JPEG at offset 16115200: Bifragment search resource limit reached. Recovery is incomplete; narrow the source range or disable fragment search.",
+        "JPEG at offset 16144896: Bifragment search resource limit reached. Recovery is incomplete; narrow the source range or disable fragment search.",
+        "JPEG at offset 21304832: Bifragment search resource limit reached. Recovery is incomplete; narrow the source range or disable fragment search."
+      ]
+    },
+    "PhotoRec": {
+      "outputs": 24,
+      "exact_originals": [
+        "1a.html",
+        "1b.jpg",
+        "2d.doc",
+        "2d.jpg",
+        "3a.jpg",
+        "3b.jpg",
+        "3c.jpg",
+        "3e.doc",
+        "3e.jpg",
+        "3g1.jpg",
+        "3g2.jpg",
+        "3i.jpg",
+        "3j.jpg",
+        "4a.zip",
+        "4b.zip"
+      ],
+      "exact_original_count": 15,
+      "exact_original_recall_all_32": 0.46875,
+      "exact_original_output_precision": 0.625,
+      "nonexact_outputs": 9,
+      "findings": [
+        {
+          "sha256": "66ab80041efaebe3f6f0b692fbb08b01820c3d9a94110724bdc89a616bbcead0",
+          "bytes": 4608,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "f95306b6d97003e327cc0da450e98536a5a6a7487f74e9251152dc3f46a73561",
+          "bytes": 18147,
+          "ground_truth_exact": "1a.html",
+          "confidence": null
+        },
+        {
+          "sha256": "4d09b003550f210dd77ada37c08026f92a2a6db522b8ba3726dea85e00ae5355",
+          "bytes": 287186,
+          "ground_truth_exact": "3a.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "fecf4388a938104402b0f98b8a9a90c4fb9b60c89d3cf1b9c32019b5727d2a3e",
+          "bytes": 10240,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "a80826fae91e3bdfe8c148f240ab79b3a3989ad41d8bf582782d32310b744779",
+          "bytes": 23544,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "1b6a495892aac4826af72125b62b20c82bfc519087870aeb03ae8d5bd378c7f2",
+          "bytes": 450048,
+          "ground_truth_exact": "2d.doc",
+          "confidence": null
+        },
+        {
+          "sha256": "8e036fa838def99d95aea2e5780df34cd1b2b28302a010e60c8a030377c45919",
+          "bytes": 608703,
+          "ground_truth_exact": "2d.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "da8bd3d361bf4844c47a39453fbe2338def0571aee2b839b8de3a276ea061533",
+          "bytes": 7113968,
+          "ground_truth_exact": "3b.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "c405e7d6d79d98afa78bd268efeef63e8fc57376efcd2f987eaea9bea5e5bd26",
+          "bytes": 56832,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "e30ec1bf9236dcaa920da5a1dc4ec00219b344929e1caf0c6089e4dbdbd76fab",
+          "bytes": 189534,
+          "ground_truth_exact": "1b.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "001f314742ac697659705b7799eb72c8c7b2643e1f8a6fb7a2079ec62b46c05e",
+          "bytes": 111693,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "610c682f3de6d1769f32a1caefd7dbad014f799142b5ee9f453ab669294dfabc",
+          "bytes": 31850,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "b7751ed2a8f3cd4f2b99f2c6819496a40b5d834363e63940f7c2d60dcce7332e",
+          "bytes": 18995,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "12480cd0b022b38e97088020298931b8ffb19c2aaedbc4da0647aa42fef9f41d",
+          "bytes": 147150,
+          "ground_truth_exact": "4a.zip",
+          "confidence": null
+        },
+        {
+          "sha256": "54349e4a2c394acf1b8fec361b82caee21d8b10aaea55aecc9e9c6aa3f6b3e2d",
+          "bytes": 1163745,
+          "ground_truth_exact": "4b.zip",
+          "confidence": null
+        },
+        {
+          "sha256": "5a4edb7c73289897196e3f6dd1564f890a0d65a0240f0081a233384f0c6ce3d4",
+          "bytes": 187793,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "5b4425d3de9a334be3edde1600d0ac77fd228d9153e0d759a330d4fbf60d4b29",
+          "bytes": 178659,
+          "ground_truth_exact": "3c.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "50872aa2c45802ddd86705e0fe4a4de3f04fbe0d1899b140af0a4aa3b01b6bdf",
+          "bytes": 1021085,
+          "ground_truth_exact": "3g1.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "2c0ab159dabd04349d80105dc005c0b0ebe0e2f18ec6e7410856d488c1dbf465",
+          "bytes": 304413,
+          "ground_truth_exact": "3g2.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "503bec56f2d2a02273496f79857d3a915b833ec5268a76c178769cabedb1f141",
+          "bytes": 573499,
+          "ground_truth_exact": "3e.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "8751b4cf9e1b3d3b8a72f6578fdd1f88a6fa763cafa162768920d37f972941ea",
+          "bytes": 71680,
+          "ground_truth_exact": "3e.doc",
+          "confidence": null
+        },
+        {
+          "sha256": "f49edfe8e6919bcf85feb07786dcef46cceec51e462c1faf18ece912bc2c26de",
+          "bytes": 24538540,
+          "ground_truth_exact": "3i.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "55a02616fd9bc21c28277b3b695ae063d1fe498312faaab80855eeed103e4144",
+          "bytes": 924877,
+          "ground_truth_exact": "3j.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "3ebd089ad7c261aca10fb143e0900339e1009c6f8b591816a468bcb1767b3339",
+          "bytes": 5551,
+          "ground_truth_exact": null,
+          "confidence": null
+        }
+      ],
+      "precision_scope": "Exact original-file hashes only. Embedded members, valid partials and altered originals count as nonexact; this is stricter than semantic file validity.",
+      "seconds": 6.989242667999861,
+      "status": "completed"
+    },
+    "Foremost": {
+      "outputs": 17,
+      "exact_originals": [
+        "1b.jpg",
+        "2d.jpg",
+        "3a.jpg",
+        "3b.jpg",
+        "3c.jpg",
+        "4a.zip"
+      ],
+      "exact_original_count": 6,
+      "exact_original_recall_all_32": 0.1875,
+      "exact_original_output_precision": 0.35294117647058826,
+      "nonexact_outputs": 11,
+      "findings": [
+        {
+          "sha256": "1dc50c7a20ccbd4c3857d191fa08d05c671b8bc9eca37410ac0bb2c938be4a84",
+          "bytes": 51251,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "4d09b003550f210dd77ada37c08026f92a2a6db522b8ba3726dea85e00ae5355",
+          "bytes": 287186,
+          "ground_truth_exact": "3a.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "8e036fa838def99d95aea2e5780df34cd1b2b28302a010e60c8a030377c45919",
+          "bytes": 608703,
+          "ground_truth_exact": "2d.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "29e3575e5c5e6f482aa8056e753f751a214b426bfd0d9ec1e23d58cdef4db4f1",
+          "bytes": 204032,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "da8bd3d361bf4844c47a39453fbe2338def0571aee2b839b8de3a276ea061533",
+          "bytes": 7113968,
+          "ground_truth_exact": "3b.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "e30ec1bf9236dcaa920da5a1dc4ec00219b344929e1caf0c6089e4dbdbd76fab",
+          "bytes": 189534,
+          "ground_truth_exact": "1b.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "43e7e6fa578e9545ba7cb0c8531de394daa48de7505b4f134b5d9572fec7a992",
+          "bytes": 210994,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "5b4425d3de9a334be3edde1600d0ac77fd228d9153e0d759a330d4fbf60d4b29",
+          "bytes": 178659,
+          "ground_truth_exact": "3c.jpg",
+          "confidence": null
+        },
+        {
+          "sha256": "34d146fc61b8a3989b833d5e8f3d6a1bf8106513842971d782f5f86f114921be",
+          "bytes": 299479,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "2d2c0a7ba2d2d03e3613ba69f9ad6df88a35e55108734893b8f5cdd5b8fab586",
+          "bytes": 1237789,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "1f1c5c6db2586d0d4022d1ced78519bd43ecfed95e63fe4e1adb1f7978b45864",
+          "bytes": 645179,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "6e9f2fff0af2550579c2ef71104fb2a47abdf3d48144d88bd8824250219ec1ac",
+          "bytes": 400898,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "bd6255e8406faf5702fbba2c2fd27426fa4186ae0fd04715b77ec446059119f7",
+          "bytes": 5444608,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "7bd4a1637faa4dcede55facf4f3041551afea621df95e8fa95abfbdcbc904077",
+          "bytes": 5443072,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "12480cd0b022b38e97088020298931b8ffb19c2aaedbc4da0647aa42fef9f41d",
+          "bytes": 147150,
+          "ground_truth_exact": "4a.zip",
+          "confidence": null
+        },
+        {
+          "sha256": "1d2990f0c44748e138be31f27cdc312c0b846df65be536899d1a407aeccf805e",
+          "bytes": 1351649,
+          "ground_truth_exact": null,
+          "confidence": null
+        },
+        {
+          "sha256": "34c975f4903b6362acbecb52056d683d2896ad6336b2b7fca3d2986b527492bb",
+          "bytes": 271717,
+          "ground_truth_exact": null,
+          "confidence": null
+        }
+      ],
+      "precision_scope": "Exact original-file hashes only. Embedded members, valid partials and altered originals count as nonexact; this is stricter than semantic file validity.",
+      "seconds": 0.9880628540004182,
+      "status": "completed"
+    }
+  },
+  "limitations": "No unsupported-type recall is hidden. Carving confidence is structural, not a probability of original-byte identity. This run establishes a baseline; fragmented and corpus-wide calibrated confidence remain separate measured experiments."
+}

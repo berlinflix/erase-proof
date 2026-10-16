@@ -35,6 +35,20 @@ passed all **27 tests**, including comparison against the independent ssdeep CLI
 The installed 0.11 release assets remain unchanged until the final rebuild.
 See [proposal coverage](PROPOSAL-COVERAGE.md) for the remaining original scope.
 
+0.12 source milestone implements bounded multi-format fragment recovery with
+per-file confidence/entropy, restricted native NVMe/ATA/Format/HPA/DCO adapters,
+private interruption recovery, the confirmed controller erase/attack escalation
+loop, guarded host-visible overwrite/discard, encryption/TCG discovery and strict
+certificate/receipt classification. Firmware command-boundary tests, native Qt
+checks and an initial **172-test** root/private-mount regression passed. Subsequent
+private-parser, atomic-rebuild and metadata confidence fixes passed their focused
+tests; the final frozen-source regression and executable/live rebuild follow.
+The [public DFRWS comparison](validation/dfrws-0.12.json) measures 10/32 exact
+originals in bounded fragment mode, with its remaining search limits preserved.
+Public 1 GiB Govdocs FAT32/ext4 erasure comparisons passed independent attacks and
+unrelated-file preservation; NTFS/exFAT comparison runs continue. Physical media
+and actual VirtualBox acceptance remain explicitly unverified.
+
 Software tests use generated images and mock hardware command boundaries.
 The supplemental QEMU block-device test also passed exact unknown-format
 recovery from a generated raw disk, unchanged source reads, 64 MiB of native
