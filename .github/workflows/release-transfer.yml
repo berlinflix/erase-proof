@@ -1,0 +1,31 @@
+name: Verify and assemble release transfer
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        required: true
+        type: string
+      manifest_asset:
+        required: true
+        type: string
+      manifest_sha256:
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: release-transfer-${{ inputs.release_id }}
+  cancel-in-progress: false
+jobs:
+  assemble:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify parts and assemble exact release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          TRANSFER_MANIFEST: ${{ inputs.manifest_asset }}
+          TRANSFER_MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+        run: python3 scripts/assemble-release-transfer.py
