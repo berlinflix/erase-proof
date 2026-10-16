@@ -24,7 +24,7 @@ parser.add_argument('iso', type=Path)
 parser.add_argument('--kernel', type=Path, required=True)
 parser.add_argument('--initrd', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
-parser.add_argument('--protocol', choices=['ide-overwrite', 'nvme-format'], default='ide-overwrite')
+parser.add_argument('--protocol', choices=['ide-overwrite', 'nvme-format', 'nvme-workflow'], default='ide-overwrite')
 args = parser.parse_args()
 if not all(p.is_file() for p in (args.iso, args.kernel, args.initrd)):
     parser.error('Provide the built ISO, kernel and initrd. No target device argument is supported.')
@@ -81,7 +81,7 @@ try:
         assert checksum(path) == configuration['before_sha256'], 'Read-only recovery changed the source.'
         references = root/'references.json'
         references.write_text(json.dumps(configuration['references']))
-        if configuration['protocol'] == 'nvme-format':
+        if configuration['protocol'].startswith('nvme-'):
             controllers = [p for p in Path('/sys/class/nvme').iterdir()
                            if (p/'serial').read_text().strip() == configuration['serial']]
             assert len(controllers) == 1
@@ -89,10 +89,25 @@ try:
             planned = cli('nvme-format-plan', controller, '--method', 'user-data', '--allow-controller', controller,
                           '--confirm', configuration['serial'])
             assert all(c['ses'] == 1 for c in planned['commands'])
-            receipt = cli('nvme-format-submit', controller, '--method', 'user-data', '--allow-controller', controller,
-                          '--confirm', configuration['serial'], '--case', root/'evidence')
-            assert receipt['payload']['state'] == 'firmware-reports-completion'
-            assert not receipt['payload']['certificate_issued']
+            workflow = configuration['protocol'] == 'nvme-workflow'
+            if workflow:
+                sequence = cli('nvme-workflow-plan', controller, '--methods', 'format-user-data',
+                               '--allow-controller', controller, '--confirm', configuration['serial'])
+                assert len(sequence['steps']) == 1
+                receipt = cli('nvme-run', controller, '--methods', 'format-user-data', '--allow-controller', controller,
+                              '--confirm', configuration['serial'], '--case', root/'evidence',
+                              '--references', references, '--timeout', '60')
+                verification = receipt['payload']['verification']
+                assert receipt['payload']['certificate_issued'] and verification['rrs'] == 0
+                assert verification['bytes_checked'] == configuration['size']
+                assert verification['independent_attack']['passed'] and len(verification['rounds']) == 1
+                firmware_receipt = verification['rounds'][0]['receipt']
+            else:
+                receipt = cli('nvme-format-submit', controller, '--method', 'user-data', '--allow-controller', controller,
+                              '--confirm', configuration['serial'], '--case', root/'evidence')
+                firmware_receipt = receipt
+            assert firmware_receipt['payload']['state'] == 'firmware-reports-completion'
+            assert not firmware_receipt['payload']['certificate_issued']
             receipt_path = root/'receipt.json'
             receipt_path.write_text(json.dumps(receipt))
             assert cli('record', receipt_path, '--trusted-fingerprint', receipt['signer_fingerprint'])['trusted_signer']
@@ -105,11 +120,12 @@ try:
             assert attacked['recovered_files'] == 0
             tools = {t['tool']: t['status'] for t in attacked['tools']}
             assert tools['PhotoRec'] == tools['bulk_extractor'] == 'completed'
-            report = {'passed': True, 'protocol': 'nvme-format', 'source_recovery_exact': True,
+            report = {'passed': True, 'protocol': configuration['protocol'], 'source_recovery_exact': True,
                       'device_model': device['model'], 'serial': configuration['serial'],
                       'recovery_source_unchanged': True, 'native_format_ioctl': True,
                       'format_ses': 1, 'format_full_zero_readback': True,
                       'signed_receipt_valid': True, 'firmware_receipt_certificate_issued': False,
+                      'logical_workflow_certificate_issued': workflow,
                       'independent_tools': tools,
                       'audit_intact': cli('audit', root/'evidence')['intact']}
             print('RESULT_MARKER'+json.dumps(report, separators=(',', ':')), flush=True)
@@ -132,7 +148,7 @@ try:
                   'metadata_gate': result['independent_attack']['metadata_gate']}
 except Exception as error:
     report = {'passed': False, 'error': str(error), 'traceback': traceback.format_exc()[-4000:]}
-    if configuration['protocol'] == 'nvme-format' and 'controller' in globals():
+    if configuration['protocol'].startswith('nvme-') and 'controller' in globals():
         report['diagnostics'] = {}
         for name, arguments in [('version', ['version']), ('namespaces', ['list-ns', controller, '--all', '-o', 'json']),
                                 ('controller', ['id-ctrl', controller, '-o', 'json']),
@@ -177,7 +193,7 @@ with tempfile.TemporaryDirectory(prefix='eraseproof-qemu-block-') as temporary:
                '-nic', 'none', '-no-reboot', '-serial', 'stdio', '-monitor', 'none',
                '-cdrom', str(args.iso.resolve()),
                '-drive', f'file={image},format=raw,if=none,id=epdisk',
-               '-device', (f'nvme,drive=epdisk,serial={configuration["serial"]}' if args.protocol == 'nvme-format'
+               '-device', (f'nvme,drive=epdisk,serial={configuration["serial"]}' if args.protocol.startswith('nvme-')
                            else f'ide-hd,drive=epdisk,bus=ide.0,unit=0,serial={configuration["serial"]}'),
                '-kernel', str(args.kernel.resolve()), '-initrd', str(args.initrd.resolve()),
                '-append', 'boot=casper quiet username=eraseproof hostname=eraseproof noprompt noeject '
