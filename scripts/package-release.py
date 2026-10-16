@@ -18,7 +18,7 @@ binary = root/"dist"/"EraseProof"
 if not (binary/"EraseProof").exists():
     raise SystemExit("Build the Linux executable first.")
 
-for name in ("cryptography", "Pillow", "pypdf", "reportlab", "qrcode", "PySide6-Essentials", "shiboken6", "cffi", "pyinstaller", "typing_extensions", "charset-normalizer", "pycparser"):
+for name in ("cryptography", "Pillow", "pypdf", "reportlab", "qrcode", "pyahocorasick", "PySide6-Essentials", "shiboken6", "cffi", "pyinstaller", "typing_extensions", "charset-normalizer", "pycparser"):
     distribution = importlib.metadata.distribution(name)
     for entry in distribution.files or []:
         if any(token in str(entry).lower() for token in ("license", "copying", "notice")):
@@ -90,12 +90,15 @@ Scope: actual image writes and guest-visible logical overwrite only.
 The default demo needs no root and never targets the system disk.
 Includes native C direct I/O, targeted logical file/folder erasure, offline
 FAT32 path cleanup, C/libext2fs ext4 allocation/inode/slack/journal cleanup,
-expanded validated carving, PhotoRec/TSK attack reports, partition discovery,
+NTFS stream/MFT/log/USN cleanup, exFAT allocation/history cleanup, selectable
+offline paths, arbitrary-format Ubuntu Trash copies, expanded validated carving,
+required PhotoRec/TSK/bulk_extractor verification, partition discovery,
 signed JSON/PDF/QR reports, trusted signer checks and audit checkpoints.
 NVMe command submission is a separate guarded privileged CLI adapter, with
 audited receipts rather than physical-erasure certificates. LUKS2 image
 keyslot removal is supported. See source docs/MEDIA.md and docs/EVIDENCE.md.
-ATA destructive commands, NTFS/exFAT targeted cleanup, snapshots and physical
+The media planner reports actual executable support and unknown hidden capacity.
+ATA destructive commands, Format NVM, HPA/DCO changes, snapshots and physical
 flash-remanence assurance are outside this release's verified scope.
 Secondary virtual-disk writes are gated by a path/serial policy and require
 separate VirtualBox acceptance testing. Begin with the image experiment.

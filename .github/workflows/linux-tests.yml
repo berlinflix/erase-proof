@@ -16,7 +16,7 @@ jobs:
       - name: Install filesystem and desktop runtime tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y dosfstools mtools sleuthkit testdisk gcc libext2fs-dev ntfs-3g-dev e2fsprogs ntfs-3g exfatprogs exfat-fuse ffmpeg p7zip-full nvme-cli hdparm cryptsetup-bin libegl1 libopengl0 curl autoconf automake build-essential flex libtool pkg-config libabsl-dev libexpat1-dev libgcrypt20-dev libgpg-error-dev libre2-dev libssl-dev zlib1g-dev
+          sudo apt-get install -y dosfstools mtools sleuthkit testdisk gcc libext2fs-dev ntfs-3g-dev e2fsprogs ntfs-3g exfatprogs exfat-fuse ffmpeg p7zip-full nvme-cli hdparm cryptsetup-bin libegl1 libopengl0 libglib2.0-bin curl autoconf automake build-essential flex libtool pkg-config libabsl-dev libexpat1-dev libgcrypt20-dev libgpg-error-dev libre2-dev libssl-dev zlib1g-dev
       - name: Build bounded native I/O and filesystem adapters
         run: bash scripts/build-native.sh
       - uses: actions/cache@v4

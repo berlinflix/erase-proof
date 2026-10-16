@@ -100,9 +100,15 @@ install -m 755 "$scripts/live-boot-check.sh" "$root/usr/local/bin/eraseproof-boo
 install -m 644 "$scripts/eraseproof-boot-check.service" "$root/etc/systemd/system/eraseproof-boot-check.service"
 mkdir -p "$root/etc/systemd/system/multi-user.target.wants"
 ln -sf ../eraseproof-boot-check.service "$root/etc/systemd/system/multi-user.target.wants/eraseproof-boot-check.service"
-mkdir -p "$root/opt/eraseproof"
-cp -a -- "$bundle/." "$root/opt/eraseproof/"
-python3 "$scripts/release_permissions.py" "$root/opt/eraseproof" --root-owner
+app_stage="$(mktemp -d "$work/app-stage.XXXXXXXX")"
+cp -a -- "$bundle/." "$app_stage/"
+python3 "$scripts/release_permissions.py" "$app_stage" --root-owner
+# A resumed build must not retain obsolete binaries from the previous bundle.
+# Keep the old application recoverable outside the rootfs snapshot.
+if [[ -e "$root/opt/eraseproof" ]]; then
+  mv -T -- "$root/opt/eraseproof" "$work/previous-app-$(date +%s%N)"
+fi
+mv -T -- "$app_stage" "$root/opt/eraseproof"
 mkdir -p "$iso/.disk"
 "$bundle/EraseProof" --cli --version > "$iso/.disk/eraseproof-version"
 printf '%s\n' 'EraseProof Ubuntu 24.04 Live - amd64' > "$iso/.disk/info"

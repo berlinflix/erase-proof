@@ -223,8 +223,13 @@ def decision(discovery):
         target = discovery['target']
         hidden = {'state': 'not-applicable-to-image'} if target['kind'] == 'image' else {'state': 'unknown'}
         if target['kind'] == 'image':
-            add('logical-overwrite', True, 'Complete current image overwrite and full readback are implemented.',
-                ['eraseproof', 'erase', target['path'], '--confirm', target['serial'], '--case', 'EVIDENCE_DIRECTORY'], target['scope'])
+            from .engine import plan
+            try:
+                plan(target['path'], confirmation=target['serial'])
+                add('logical-overwrite', True, 'Complete current image overwrite and full readback are implemented.',
+                    ['eraseproof', 'erase', target['path'], '--confirm', target['serial'], '--case', 'EVIDENCE_DIRECTORY'], target['scope'])
+            except EraseProofError as error:
+                add('logical-overwrite', False, str(error), scope=target['scope'])
             if discovery.get('encryption') == 'LUKS2':
                 add('luks2-keyslot-removal', True, 'Removes active image keyslots; cached keys and header backups remain outside scope.',
                     ['eraseproof', 'luks-erase', target['path'], '--confirm', target['serial'], '--case', 'EVIDENCE_DIRECTORY'],

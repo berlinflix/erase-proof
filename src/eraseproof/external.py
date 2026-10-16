@@ -44,12 +44,14 @@ def stop(process):
         process.wait(timeout=3)
 
 
-def run(command, root, name, timeout, cancel=None, fd=None, output_limit=8*1024**3, *, bundled=False):
+def run(command, root, name, timeout, cancel=None, fd=None, output_limit=8*1024**3, *, bundled=False, per_file_limit=256*1024**2):
+    if not 0 < per_file_limit <= 16*1024**3 or not 0 < output_limit <= 16*1024**3:
+        raise EraseProofError('Invalid external recovery output limits.')
     limiter = shutil.which("prlimit")
     if not limiter:
         return {"status": "limits-unavailable", "returncode": None, "duration_seconds": 0}
     started = time.monotonic()
-    prefix = [limiter, "--as=2147483648", "--cpu="+str(timeout+10), "--fsize=268435456", "--core=0", "--"]
+    prefix = [limiter, "--as=2147483648", "--cpu="+str(timeout+10), "--fsize="+str(per_file_limit), "--core=0", "--"]
     stdout, stderr = root/(name+".stdout.log"), root/(name+".stderr.log")
     if bundled and getattr(sys, "frozen", False):
         # Apply bundled dependencies to the helper only. prlimit and other
@@ -86,5 +88,5 @@ def run(command, root, name, timeout, cancel=None, fd=None, output_limit=8*1024*
     return {"status": status, "returncode": process.returncode,
             "duration_seconds": time.monotonic()-started,
             "stdout_log": str(stdout), "stderr_log": str(stderr),
-            "limits": {"address_space_bytes": 2147483648, "per_file_bytes": 268435456,
+            "limits": {"address_space_bytes": 2147483648, "per_file_bytes": per_file_limit,
                        "output_bytes": output_limit, "output_files": 10_000, "wall_seconds": timeout}}

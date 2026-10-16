@@ -8,11 +8,13 @@ Qt desktop / CLI
       +-- target discovery and plan policy (lsblk + stat + device identity)
       |
       +-- native recovery
+      |     +-- read-only Ubuntu Trash item/tree copies and SHA-256 outputs
       |     +-- chunked binary carver (16 container families, ZIP/Office identification)
       |     +-- bounded PNG chunk-gap reconstruction
       |     +-- isolated decoding / strict PDF / ZIP CRC / SQLite validators
       |     +-- independent filesystem adapter (fls / icat)
-      |     +-- PhotoRec attack reports and MBR/GPT partition offsets
+      |     +-- historical ext4 journal inode maps and MBR/GPT partition offsets
+      |     +-- required PhotoRec/TSK/bulk_extractor certification gate
       |
       +-- overwrite engine
       |     +-- C descriptor-only O_DIRECT writes, reported buffered tails
@@ -24,12 +26,16 @@ Qt desktop / CLI
       |
       +-- targeted operations
       |     +-- pinned logical file/folder overwrite and unlink
-      |     +-- offline FAT32 chains, metadata and known free-space copies
+      |     +-- offline FAT32 ownership, complete free allocation, metadata and slack
       |     +-- C/libext2fs offline ext4 free space, unused inodes, directory slack and journal history
+      |     +-- libntfs-3g/ntfswipe MFT/index/log/USN/free-space cleanup
+      |     +-- checked exFAT bitmap/FAT ownership, metadata and stream slack
       |     +-- allocated unrelated file hashes and read-only filesystem consistency gates
       |
       +-- media operations
       |     +-- read-only NVMe/ATA/HPA/DCO discovery
+      |     +-- method matrix with explicit unknown/unsupported states
+      |     +-- sysfs NVMe controller ownership instead of device-name guesses
       |     +-- all-namespace guarded NVMe submission, audited receipts
       |     +-- real software LUKS2 image keyslot removal
       |

@@ -31,9 +31,13 @@ must parse, report the full source byte count and contain no reported exceptions
 or scanner errors. Truncated, missing, malformed and incomplete reports fail the
 gate. The original report and its SHA-256 are retained.
 
-External processes run under prlimit with a 2 GiB address-space cap, 256 MiB
-per-output-file limit and CPU/wall budgets. Output is monitored against an 8 GiB,
-10,000-file ceiling. Metadata attacks share a wall-time budget. Workers run in
+External processes run under prlimit with a 2 GiB address-space cap, a 256 MiB
+ordinary output-file limit and CPU/wall budgets. PhotoRec can recover an entire
+FAT volume as a `.fat` container, so its per-file allowance can grow to the source
+size within the case budget. The shared case output budget is 8 GiB for smaller
+sources and grows to at most 16 GiB for 1–8 GiB evaluation images. Every actual
+limit appears in the attack report. Output is monitored against that budget and
+a 10,000-file ceiling. Metadata attacks share a wall-time budget. Workers run in
 separate process groups so cancellation/timeout terminates their child processes.
 Limits are explicit coverage boundaries: exceeding one refuses certification.
 They do not claim exhaustive decoding of every compressed or encrypted format.

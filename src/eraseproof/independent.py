@@ -71,6 +71,11 @@ def attack(path, output_dir, sector_offset=0, progress=None, cancel=None, timeou
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     report = {"source": source, "tools": [], "complete": True, "recovered_files": 0,
               "scope": "Independent tool outputs and errors are preserved. Unrecognized filesystems are not counted as a clean forensic result."}
+    # PhotoRec's FAT handler can extract the filesystem as one .fat container.
+    # Let a 1–8 GiB volume finish without removing that attack or suppressing
+    # its output. All tool outputs share the same bounded case budget.
+    output_budget = max(8*1024**3, min(16*1024**3, source['size']*2+64*1024**2))
+    container_limit = min(output_budget, max(256*1024**2, source['size']))
     checkpoint(cancel)
     if progress:
         progress("Independent attack", 0, "Running PhotoRec against the pinned source")
@@ -79,7 +84,8 @@ def attack(path, output_dir, sector_offset=0, progress=None, cancel=None, timeou
         log = root/"photorec.log"
         command = ["photorec", "/log", "/logname", str(log), "/d", str(destination), "/cmd", image,
                    "partition_none,options,mode_ext2,fileopt,everything,enable,wholespace,search"]
-        result = external.run(command, root, "photorec", timeout, cancel, fd)
+        result = external.run(command, root, "photorec", timeout, cancel, fd,
+                              output_limit=output_budget, per_file_limit=container_limit)
         files = [p for directory in root.glob("photorec.*") if directory.is_dir() for p in directory.rglob("*") if p.is_file() and p.name != "report.xml"]
         tool = {"tool": "PhotoRec", **result, "files": [{"path": str(p), "bytes": p.stat().st_size} for p in files],
                 "recovered_files": len(files), "log": str(log)}
@@ -98,7 +104,7 @@ def attack(path, output_dir, sector_offset=0, progress=None, cancel=None, timeou
         try:
             started = time.monotonic()
             listing = external.run(["fls", "-d", "-r", "-p", "-F", "-o", str(sector_offset), image],
-                                   root, "sleuthkit-list", timeout, cancel, fd)
+                                   root, "sleuthkit-list", timeout, cancel, fd, output_limit=output_budget)
             if listing["status"] != "completed":
                 if listing["status"] != "failed" or listing.get("returncode") != 1:
                     metadata_status = listing["status"]
@@ -144,7 +150,7 @@ def attack(path, output_dir, sector_offset=0, progress=None, cancel=None, timeou
     if bulk_tool():
         destination = root/"bulk-extractor"
         result = external.run([bulk_tool(), "-j", "2", "-o", str(destination), image], root,
-                              "bulk-extractor", timeout, cancel, fd, bundled=True)
+                              "bulk-extractor", timeout, cancel, fd, output_limit=output_budget, bundled=True)
         if result["status"] == "completed":
             result["completion"] = bulk_completion(destination, source["size"])
             if not result["completion"]["complete"]:

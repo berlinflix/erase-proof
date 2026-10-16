@@ -169,3 +169,20 @@ def test_excessive_signatures_are_an_incomplete_scan(tmp_path):
     image.write_bytes((b"\x1f\x8b\x08x")*100_001)
     with pytest.raises(EraseProofError, match="hit limit"):
         carve.scan(image)
+
+
+def test_streamed_container_output_has_explicit_file_limit(tmp_path):
+    writer = "import sys; open(sys.argv[1], 'wb').write(bytes(3*1024*1024))"
+    too_small = tmp_path/'limited'
+    too_small.mkdir()
+    result = external.run([sys.executable, '-c', writer, too_small/'container.fat'], too_small, 'worker', 10,
+                          output_limit=8*1024**2, per_file_limit=1024**2)
+    assert result['status'] == 'failed'
+    assert result['limits']['per_file_bytes'] == 1024**2
+    enough = tmp_path/'complete'
+    enough.mkdir()
+    result = external.run([sys.executable, '-c', writer, enough/'container.fat'], enough, 'worker', 10,
+                          output_limit=8*1024**2, per_file_limit=4*1024**2)
+    assert result['status'] == 'completed'
+    assert (enough/'container.fat').stat().st_size == 3*1024**2
+    assert result['limits']['per_file_bytes'] == 4*1024**2

@@ -12,12 +12,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 import zipfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--filesystems", nargs="+", choices=["fat32", "ext4", "ntfs", "exfat"], default=["fat32", "ext4", "ntfs", "exfat"])
 parser.add_argument("--output", required=True, type=Path)
+parser.add_argument('--image-mib', type=int, choices=[128, 1024, 2048, 4096, 8192], default=128)
+parser.add_argument('--user-activity', action='store_true', help='Create prior versions, atomic saves and deleted backup copies before normal unlink')
 args = parser.parse_args()
 if os.geteuid() != 0:
     parser.error("Use sudo for isolated loop-image mounts. No physical disks are used.")
@@ -71,6 +74,7 @@ def create_originals(root):
 
 reports = []
 for filesystem in args.filesystems:
+    started = time.monotonic()
     case = output/filesystem
     case.mkdir()
     originals = case/"originals"
@@ -80,7 +84,7 @@ for filesystem in args.filesystems:
         image, mountpoint = managed/"volume.img", managed/"mnt"
         mountpoint.mkdir()
         with image.open("xb") as stream:
-            stream.truncate(128*1024*1024)
+            stream.truncate(args.image_mib*1024*1024)
         if filesystem == "fat32":
             run("mkfs.fat", "-F", "32", image)
         elif filesystem == "ext4":
@@ -105,10 +109,24 @@ for filesystem in args.filesystems:
             folder = mountpoint/("normal-user-folder-"+uuid.uuid4().hex[:6])
             folder.mkdir()
             for original in originals.iterdir():
-                with original.open("rb") as source, (folder/original.name).open("xb") as destination:
+                active = folder/original.name
+                if args.user_activity:
+                    with active.open('xb') as previous:
+                        previous.write(b'PRIOR-USER-VERSION-'+os.urandom(12139))
+                        previous.flush()
+                        os.fsync(previous.fileno())
+                    run('sync', '-f', mountpoint)
+                staging = folder/('.save-'+original.name) if args.user_activity else active
+                with original.open("rb") as source, staging.open("xb") as destination:
                     shutil.copyfileobj(source, destination)
                     destination.flush()
                     os.fsync(destination.fileno())
+                if args.user_activity:
+                    os.replace(staging, active)
+                    backup = folder/(original.name+'.backup')
+                    shutil.copyfile(active, backup)
+                    run('sync', '-f', mountpoint)
+                    backup.unlink()
             # Keep a separate live file to make this an actual populated volume.
             (mountpoint/"still-live.txt").write_text("This file remains allocated.")
             run("sync", "-f", mountpoint)
@@ -134,6 +152,9 @@ for filesystem in args.filesystems:
             if not all(entry["recovered_exactly"] for entry in matches):
                 raise RuntimeError(filesystem+": generic metadata recovery failed for a fresh unknown-extension/text file.")
             report = {"filesystem": filesystem, "deletion": "os.unlink/os.rmdir through mounted Linux filesystem driver",
+                      'image_bytes': args.image_mib*1024*1024,
+                      'prior_versions_atomic_saves_and_backup_deletions': args.user_activity,
+                      'elapsed_seconds': round(time.monotonic()-started, 3),
                       "predefined_demo_used": False, "references_given_to_recovery": False,
                       "exact_matches": sum(entry["recovered_exactly"] for entry in matches),
                       "original_count": len(truth), "files": matches, "warnings": recovered["warnings"],

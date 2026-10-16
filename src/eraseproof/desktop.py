@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow,
     QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy, QInputDialog,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QScrollArea,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget, QScrollArea,
 )
 
 from . import __version__, demo, tsk
@@ -73,6 +73,9 @@ QProgressBar::chunk { background: #719b54; border-radius: 3px; }
 QPlainTextEdit { border: 1px solid #dfe7d5; border-radius: 5px; background: #fafcf6; font-family: 'DejaVu Sans Mono', monospace; color: #718760; font-size: 10px; }
 QDialog { background: #f8faf4; }
 QCheckBox { spacing: 8px; color: #7d8e70; }
+QTabWidget::pane { border: none; }
+QTabBar::tab { background: #e6edde; color: #536c48; padding: 10px 18px; margin-right: 4px; border-radius: 4px; }
+QTabBar::tab:selected { background: #d4e5bc; color: #27432c; font-weight: 600; }
 QToolTip { background: #203e2b; color: #e6f0db; padding: 7px; border: none; }
 """
 
@@ -427,6 +430,7 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
+        self.targeted_modes = QTabWidget()
         logical, box = panel("Ordinary file / folder", "Overwrites and verifies current file bytes, then unlinks. Journals, snapshots and historical copies are explicitly outside this operation's assurance.")
         row = QHBoxLayout()
         self.file_target = QLineEdit()
@@ -440,7 +444,7 @@ class MainWindow(QMainWindow):
         row.addStretch()
         row.addWidget(self.registered("Overwrite & unlink…", self.erase_file_target, True))
         box.addLayout(row)
-        layout.addWidget(logical)
+        self.targeted_modes.addTab(logical, 'Files and folders')
         offline, box = panel("Offline filesystem image", "Preserves unrelated allocated files. Cleanup removes the selected file or folder and clears deleted history across the volume. Use an unattached FAT32, ext4, NTFS or exFAT volume image.")
         self.offline_filesystem = QComboBox()
         self.offline_filesystem.addItems(["FAT32", "ext4", "NTFS", "exFAT"])
@@ -464,7 +468,8 @@ class MainWindow(QMainWindow):
         row.addStretch()
         row.addWidget(self.registered("Erase selected image path…", self.erase_fat_target, True))
         box.addLayout(row)
-        layout.addWidget(offline)
+        self.targeted_modes.addTab(offline, 'Offline filesystem history')
+        layout.addWidget(self.targeted_modes)
         self.targeted_details = QPlainTextEdit()
         self.targeted_details.setReadOnly(True)
         self.targeted_details.setPlaceholderText("Plans, filesystem entries and measured results appear here.")

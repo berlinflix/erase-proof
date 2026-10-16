@@ -151,3 +151,6 @@ def test_image_plan_contains_actual_cli_without_running_it(tmp_path):
     assert result['recommended'] == 'logical-overwrite'
     assert str(path) in result['methods'][0]['command']
     assert path.read_bytes() == b'unchanged'
+    ordinary = tmp_path/'keep.txt'
+    ordinary.write_bytes(b'preserve')
+    assert decision(probe(ordinary))['recommended'] is None

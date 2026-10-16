@@ -36,6 +36,12 @@ writes the files, flushes them and deletes them using ordinary `os.unlink` and
 engine. Recovery receives only the image and output path. The original hashes
 are compared afterwards by the test harness.
 
+`--image-mib` also supports 1, 2, 4 and 8 GiB images. `--user-activity` adds
+prior versions, atomic saves and deleted backup copies. A complete 1 GiB run on
+all four filesystems recovered all six current files exactly after that activity
+and left every source hash unchanged. [Evaluation](EVALUATION.md) records the
+larger erasure checks and reproduction commands.
+
 ```bash
 sudo /path/to/project-venv/bin/python scripts/verify-normal-deletion.py \
   --output qa/normal-deletion-NEW

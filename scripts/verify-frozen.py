@@ -48,6 +48,17 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     logical.write_text("Native executable targeted erasure fixture")
     assert run("erase-files", logical, "--confirm", logical.name, "--case", root/"evidence")["payload"]["verification"]["passed"]
     assert not logical.exists()
+    trash_root = root/'Trash'
+    (trash_root/'info').mkdir(parents=True)
+    (trash_root/'files').mkdir()
+    trash_data = os.urandom(13017)
+    (trash_root/'files/fresh.custom').write_bytes(trash_data)
+    (trash_root/'info/fresh.custom.trashinfo').write_text('[Trash Info]\nPath=/original/fresh.custom\n')
+    assert run('trash-list', '--trash-root', trash_root)['entries'][0]['id'] == 'fresh.custom'
+    trash = run('trash-recover', 'fresh.custom', '--trash-root', trash_root, '--output', root/'trash-output')
+    assert Path(trash['candidates'][0]['output']).read_bytes() == trash_data
+    assert (trash_root/'files/fresh.custom').read_bytes() == trash_data
+    assert run('media-plan', manifest['image'])['read_only']
     fat_manifest = run("demo", "create", root/"fat-target")
     fat_image = Path(fat_manifest["image"])
     prepared = run("fat32-plan", fat_image, "/REPORT.PDF")

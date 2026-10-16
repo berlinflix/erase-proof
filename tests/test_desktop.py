@@ -84,6 +84,7 @@ def test_native_offline_targeted_workflow(tmp_path, monkeypatch, filesystem):
     application = QApplication.instance() or QApplication([])
     window = MainWindow(tmp_path/(filesystem+"-workspace"))
     window.switch(5)
+    window.targeted_modes.setCurrentIndex(1)
     window.offline_filesystem.setCurrentText(filesystem)
     window.fat_image.setText(str(image))
     window.fat_internal.setText("/private-case")
