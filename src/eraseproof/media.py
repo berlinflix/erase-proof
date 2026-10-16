@@ -36,6 +36,28 @@ def number(value):
     return int(value, 0) if isinstance(value, str) else int(value)
 
 
+def namespace_identifiers(response):
+    """Normalize nvme-cli's object entries without trusting incomplete lists.
+
+    Ubuntu 24.04 nvme-cli 2.8 emits {"nsid_list": [{"nsid": 1}]}.
+    Integer entries are also accepted for older inventory adapters. A full
+    Identify page has no terminator and could omit additional namespaces;
+    refuse that case rather than silently narrowing controller-wide scope.
+    """
+    entries = response.get('nsid_list') if isinstance(response, dict) else None
+    if not isinstance(entries, list) or len(entries) >= 1024:
+        raise EraseProofError('Unsupported or potentially truncated namespace inventory; controller execution is blocked.')
+    identifiers = []
+    for entry in entries:
+        identifier = entry.get('nsid') if isinstance(entry, dict) else entry
+        if (not isinstance(identifier, int) or isinstance(identifier, bool)
+                or not 0 < identifier < 0xffffffff
+                or identifiers and identifier <= identifiers[-1]):
+            raise EraseProofError('Invalid or ambiguous namespace identifiers; controller execution is blocked.')
+        identifiers.append(identifier)
+    return identifiers
+
+
 def controller_namespaces(controller, inventory=None, sysfs=Path('/sys')):
     """Match sysfs ancestry, never the numeric spelling of an NVMe device.
 
@@ -64,9 +86,7 @@ def nvme_probe(controller):
         raise EraseProofError("Select a real NVMe controller character device, such as /dev/nvme0.")
     identify = command(["nvme", "id-ctrl", str(path), "-o", "json"], True)
     namespace_data = command(["nvme", "list-ns", str(path), "--all", "-o", "json"], True)
-    namespace_ids = namespace_data.get("nsid_list")
-    if not isinstance(namespace_ids, list) or len(namespace_ids) > 1024 or any(not isinstance(n, int) or isinstance(n, bool) or n <= 0 for n in namespace_ids):
-        raise EraseProofError("Unsupported namespace inventory response; controller execution is blocked.")
+    namespace_ids = namespace_identifiers(namespace_data)
     namespaces = controller_namespaces(path)
     from .encryption import inspect_sed
     fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)

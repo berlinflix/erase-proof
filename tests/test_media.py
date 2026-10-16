@@ -11,6 +11,23 @@ from eraseproof.media import nvme_plan, erase_luks_image, probe, submit_nvme
 from eraseproof.models import EraseProofError
 
 
+@pytest.mark.parametrize('entries', [[{'nsid': 1}, {'nsid': 7}], [1, 7]])
+def test_namespace_inventory_accepts_nvme_cli_entries(entries):
+    from eraseproof.media import namespace_identifiers
+    assert namespace_identifiers({'nsid_list': entries}) == [1, 7]
+
+
+@pytest.mark.parametrize('response', [None, [], {}, {'nsid_list': '1'},
+    {'nsid_list': [{'nsid': True}]}, {'nsid_list': [{'nsid': '1'}]},
+    {'nsid_list': [{'nsid': 0}]}, {'nsid_list': [{'nsid': 0xffffffff}]},
+    {'nsid_list': [{'nsid': 2}, {'nsid': 1}]}, {'nsid_list': [1, 1]},
+    {'nsid_list': [{}]}, {'nsid_list': list(range(1, 1025))}])
+def test_namespace_inventory_refuses_ambiguous_or_incomplete_scope(response):
+    from eraseproof.media import namespace_identifiers
+    with pytest.raises(EraseProofError):
+        namespace_identifiers(response)
+
+
 def controller():
     return {"path": "/dev/nvme99", "serial": "TEST-NOT-A-REAL-DEVICE", "model": "Fixture",
             "identify": {"sanicap": 3, "cmic": 0}, "namespace_ids": [1, 2],

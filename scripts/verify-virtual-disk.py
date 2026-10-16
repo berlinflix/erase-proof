@@ -48,7 +48,7 @@ def sha(path):
 
 
 guest_template = r'''
-import hashlib,json,subprocess,tempfile
+import hashlib,json,subprocess,tempfile,traceback
 from pathlib import Path
 configuration = CONFIGURATION
 app = '/opt/eraseproof/EraseProof'
@@ -131,7 +131,15 @@ try:
                   'independent_tools': result['independent_attack']['required_tools'],
                   'metadata_gate': result['independent_attack']['metadata_gate']}
 except Exception as error:
-    report = {'passed': False, 'error': str(error)}
+    report = {'passed': False, 'error': str(error), 'traceback': traceback.format_exc()[-4000:]}
+    if configuration['protocol'] == 'nvme-format' and 'controller' in globals():
+        report['diagnostics'] = {}
+        for name, arguments in [('version', ['version']), ('namespaces', ['list-ns', controller, '--all', '-o', 'json']),
+                                ('controller', ['id-ctrl', controller, '-o', 'json']),
+                                ('namespace', ['id-ns', controller, '--namespace-id=1', '-o', 'json'])]:
+            observed = subprocess.run(['nvme', *arguments], capture_output=True, text=True, timeout=15)
+            report['diagnostics'][name] = {'returncode': observed.returncode,
+                                         'stdout': observed.stdout[:10000], 'stderr': observed.stderr[:2000]}
 print('RESULT_MARKER'+json.dumps(report, separators=(',', ':')), flush=True)
 '''
 
