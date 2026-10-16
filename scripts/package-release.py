@@ -7,6 +7,11 @@ import importlib.metadata
 import json
 import shutil
 import subprocess
+import argparse
+
+parser = argparse.ArgumentParser(description='Prepare notices/provenance and package the verified Linux distribution')
+parser.add_argument('--prepare-only', action='store_true', help='Populate the verified bundle for a live-image refresh, without creating archives/checksums')
+args = parser.parse_args()
 from release_permissions import file_mode
 
 root = Path(__file__).resolve().parent.parent
@@ -131,6 +136,9 @@ VirtualBox has not been operated by the developer in this session.
 Keep the whole EraseProof folder together; the _internal directory is needed.
 """)
 shutil.copytree(root/"docs", binary/"docs", dirs_exist_ok=True)
+if args.prepare_only:
+    print(json.dumps({'bundle': str(binary), 'version': version, 'notices_and_provenance': 'prepared'}))
+    raise SystemExit(0)
 
 archive = output/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz"
 def archive_mode(info):
