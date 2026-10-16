@@ -58,6 +58,12 @@ state of those checks. `SHA256SUMS` covers release assets. The native archive
 includes `BUILD-PACKAGES.txt`, `BUILD-SOURCE.json` and third-party notices. A
 source-only checkout without Git records unknown provenance explicitly.
 
+The delivered live ISO passed actual QEMU/KVM BIOS and UEFI boots with visually
+reviewed desktops. Its expanded in-guest check also passed the complete frozen
+workflow on Ubuntu 24.04, including FAT32/ext4/NTFS targeted cleanup and exact
+preservation. No hard disks were attached. These are QEMU results; VirtualBox
+acceptance has not been performed.
+
 ## Boundaries
 
 Recovery cannot recreate overwritten, reused, discarded or unavailable encrypted

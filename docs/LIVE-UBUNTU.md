@@ -91,5 +91,15 @@ workflow inside the live guest. All three guests had no hard disks attached.
 This validates the live software environment, not VirtualBox device access or
 physical storage sanitization.
 
+The 0.11 image also passed all three routes on 16 October 2026. The verified ISO
+SHA-256 is `ad785f141f5bc854c2450a3881793135b0823b093a68aa95c6d0242f8dca6cdd`.
+BIOS and UEFI graphical boots took 41.446 and 49.337 seconds in the observed
+QEMU/KVM runs. Both screenshots were inspected. The expanded engine run took
+73.559 seconds and additionally exercised the full shipped-binary workflow
+against Noble's actual filesystem tools: whole-image and FAT32/ext4/NTFS
+targeted cleanup, preserved files, Trash, media planning, signed PDF/audit and
+offscreen Qt startup. Every run had zero hard disks attached. These timings
+include the screenshot-settle delay and are machine-specific observations.
+
 References: [Ubuntu casper](https://manpages.ubuntu.com/manpages/noble/man7/casper.7.html),
 [GNU GRUB rescue image construction](https://www.gnu.org/software/grub/manual/grub/html_node/Invoking-grub_002dmkrescue.html).

@@ -5,6 +5,7 @@ them to test the ISO's real GRUB BIOS/UEFI route and capture it for visual QA.
 """
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,10 @@ args = parser.parse_args()
 if args.iso.suffix != ".iso" or not args.iso.is_file() or bool(args.kernel) != bool(args.initrd):
     parser.error("Provide an existing ISO and either both kernel/initrd paths or neither.")
 args.output.mkdir(parents=True, exist_ok=False)
+iso_digest = hashlib.sha256()
+with args.iso.open('rb') as source:
+    for block in iter(lambda: source.read(4*1024*1024), b''):
+        iso_digest.update(block)
 out = args.output.resolve()
 serial = out/"serial.log"
 try:
@@ -86,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix="ep-qemu-") as control, (out/"qemu.log")
         from PIL import Image
         with Image.open(out/"screen.ppm") as screen:
             screen.save(out/"screen.png")
-        report = {"iso": str(args.iso.resolve()), "acceleration": acceleration, "hard_disks_attached": 0,
+        report = {"iso": str(args.iso.resolve()), "iso_sha256": iso_digest.hexdigest(), "acceleration": acceleration, "hard_disks_attached": 0,
                   "mode": "generated-image-engine-selftest" if args.kernel else ("UEFI-GRUB" if args.uefi else "BIOS-GRUB"),
                   "serial_boot_condition": "passed", "duration_seconds": time.monotonic()-started,
                   "screenshot": str(out/"screen.png"), "visual_gui_review": "required", "virtualbox_tested": False}

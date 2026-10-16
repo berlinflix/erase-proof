@@ -1,0 +1,38 @@
+{
+  "schema": "eraseproof.development-validation.v1",
+  "version": "0.11.0",
+  "date": "2026-10-16",
+  "assurance": "Observed development checks; not an independent certification or reproducible-build attestation.",
+  "app_core_commit": "a98338e",
+  "app_executable_sha256": "e50009af942fcde854eb16845ecf1e0927cab22cd13586ffab29bc810ffd2ca4",
+  "wsl_ubuntu_22_04": {
+    "full_regression_tests_passed": 110,
+    "final_ui_tests_passed": 8,
+    "ordinary_deletion_1gib": {
+      "fat32": "6/6 exact, source unchanged",
+      "ext4": "6/6 exact, source unchanged",
+      "ntfs": "6/6 exact, source unchanged",
+      "exfat": "6/6 exact, source unchanged",
+      "references_passed_into_recovery": false,
+      "activity": ["prior versions", "atomic saves", "backup copies/deletions", "ordinary unlink/rmdir"]
+    },
+    "targeted_1gib_all_four_filesystems": "RRS 0, complete history readback, all three independent tools completed, unrelated file independently extracted exactly",
+    "targeted_exfat_8gib": "RRS 0, complete history readback, all three independent tools completed, unrelated file independently extracted exactly",
+    "actual_gio_trash_recovery": "exact arbitrary-byte copy, original unchanged",
+    "actual_owned_loop_image_overwrite_refusal": "passed before any mutation",
+    "standalone_workflow": "passed",
+    "targeted_pdf_signature_and_attachment": "passed; both rendered pages visually reviewed"
+  },
+  "ubuntu_24_04_live": {
+    "iso_sha256": "ad785f141f5bc854c2450a3881793135b0823b093a68aa95c6d0242f8dca6cdd",
+    "hypervisor": "QEMU/KVM",
+    "hard_disks_attached_per_run": 0,
+    "bios_grub": "passed; 1920x1080 desktop visually reviewed",
+    "uefi_grub": "passed; 1024x768 desktop visually reviewed",
+    "expanded_guest_workflow": "passed recovery, whole-image/FAT32/ext4/NTFS erasure, preserved files, Trash, planner, signed JSON/PDF/audit, Qt startup"
+  },
+  "oracle_virtualbox_acceptance": "deferred by user; not performed",
+  "physical_firmware_or_remanence_validation": "not performed",
+  "research_proposal_complete": false,
+  "remaining": ["ATA destructive adapters", "Format NVM", "HPA/DCO changes", "ssdeep", "broader arbitrary fragment reconstruction", "public-corpus comparison study", "physical-media and standards evaluation"]
+}
