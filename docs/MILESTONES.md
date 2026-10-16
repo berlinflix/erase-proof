@@ -73,6 +73,13 @@ The final ISO passed visually reviewed BIOS/UEFI desktops, the expanded Ubuntu
 workflow passed in 79.641 seconds when run alone; a three-VM concurrent attempt
 hit its 180-second service limit. See [final validation](validation-0.12.json).
 
+Final 0.12 distribution checks passed SHA-256 verification, source hygiene,
+sealed bundle integrity, archive permissions, extracted CLI and native Qt startup.
+The application code is unchanged after `3302845`; native/source artifacts retain
+packaging revision `c111cc8`. The post-packaging
+[distribution record](validation/distribution-0.12.json) and
+[checksums](validation/SHA256SUMS-0.12.txt) identify the verified release files.
+
 Software tests use generated images and mock hardware command boundaries.
 The supplemental QEMU block-device test also passed exact unknown-format
 recovery from a generated raw disk, unchanged source reads, 64 MiB of native

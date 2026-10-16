@@ -1,0 +1,3 @@
+c653de2abc67142c573d4a135b5089304d9d61b31339eabe058de516e499da53  EraseProof-Ubuntu-x86_64-0.12.0.tar.gz
+e93514d6b8ee8f22c6ee01d4eac4e86021c60ecbd9e9f75ce5ad9b1a5668764d  EraseProof-source-0.12.0.zip
+6618bfc7e95dcf0813a82dba13d2280ca726a276d69a76863ab25ae245e93c1e  EraseProof-Live-Ubuntu24.04-x86_64-0.12.0.iso

@@ -1,0 +1,22 @@
+{
+  "schema": "eraseproof.distribution-validation.v1",
+  "version": "0.12.0",
+  "app_core_commit": "33028454ac3c63c4e2d223316f7317b46b483d58",
+  "artifact_packaging_commit": "c111cc88a003f00bdec36743f7342b14b60de1cb",
+  "tracked_worktree_modified_at_packaging": false,
+  "checksums": "passed",
+  "source_hygiene": "passed",
+  "prepared_bundle_manifest": "passed",
+  "archive_permissions": "passed",
+  "extracted_linux_cli": "passed",
+  "extracted_qt_startup": "passed",
+  "checksums_file": "SHA256SUMS-0.12.txt",
+  "artifacts": {
+    "EraseProof-Ubuntu-x86_64-0.12.0.tar.gz": 76816747,
+    "EraseProof-source-0.12.0.zip": 959771,
+    "EraseProof-Live-Ubuntu24.04-x86_64-0.12.0.iso": 464451584
+  },
+  "publication_note": "Validation/checksum records are added after packaging. Application code remains identical to the recorded core commit; each native bundle retains its packaging revision.",
+  "virtualbox_tested": false,
+  "physical_media_tested": false
+}
