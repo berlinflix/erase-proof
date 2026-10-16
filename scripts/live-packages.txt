@@ -35,6 +35,9 @@ dosfstools
 mtools
 sleuthkit
 testdisk
+libfuzzy2
+ssdeep
+foremost
 nvme-cli
 hdparm
 cryptsetup-bin

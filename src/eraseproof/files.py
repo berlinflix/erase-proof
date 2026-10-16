@@ -112,10 +112,8 @@ def erase_files(path, confirmation, evidence_dir, progress=None, cancel=None, un
                 opened = os.fstat(stream.fileno())
                 if _identity(opened) != {key: item[key] for key in ("device", "inode", "size", "mtime_ns")} or opened.st_nlink != 1:
                     raise EraseProofError("A selected file changed after planning. Operation stopped.")
-                before = hashlib.sha256()
-                for block in iter(lambda: stream.read(CHUNK), b""):
-                    checkpoint(cancel)
-                    before.update(block)
+                from .fingerprints import measure
+                fingerprint = measure(iter(lambda: stream.read(CHUNK), b""), cancel)
                 stream.seek(0)
                 written, zeros = 0, bytes(CHUNK)
                 native = nativeio.library() is not None
@@ -174,7 +172,8 @@ def erase_files(path, confirmation, evidence_dir, progress=None, cancel=None, un
                         os.fsync(parent_fd)
                     finally:
                         os.close(parent_fd)
-                measurements.append({"path": item["path"], "bytes_checked": checked, "before_sha256": before.hexdigest(),
+                measurements.append({"path": item["path"], "bytes_checked": checked, "before_sha256": fingerprint["sha256"],
+                                     "fingerprint": fingerprint,
                                      "after_sha256": after.hexdigest(), "unlinked": unlink, "nonzero_bytes": 0,
                                      "io": {"implementation": "C/O_DIRECT" if native else "Python/buffered-fsync",
                                             "direct_bytes": direct_bytes, "buffered_tail_bytes": tail_bytes}})

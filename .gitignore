@@ -27,6 +27,7 @@ __pycache__/
 *.dd
 *.iso
 *.so
+*.so.*
 /src/eraseproof/resources/native/eraseproof-ext4
 /src/eraseproof/resources/native/eraseproof-ntfs
 /src/eraseproof/resources/native/eraseproof-ext4-journal

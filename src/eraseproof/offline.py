@@ -60,20 +60,25 @@ def inventory(image, fd, filesystem="ext4"):
 
 
 def fingerprint_data(entry, chunks):
+    from .fingerprints import measure
     sha, blocks, head, tail, pending, length = hashlib.sha256(), set(), b"", b"", b"", 0
-    for data in chunks:
-        sha.update(data)
-        length += len(data)
-        head, tail = (head+data)[:64], (tail+data)[-64:]
-        pending += data
-        full = len(pending)//512*512
-        for at in range(0, full, 512):
-            block = pending[at:at+512]
-            if any(block):
-                blocks.add(hashlib.sha256(block).hexdigest())
-        pending = pending[full:]
+    def feed():
+        nonlocal head, tail, pending, length
+        for data in chunks:
+            sha.update(data)
+            length += len(data)
+            head, tail = (head+data)[:64], (tail+data)[-64:]
+            pending += data
+            full = len(pending)//512*512
+            for at in range(0, full, 512):
+                block = pending[at:at+512]
+                if any(block):
+                    blocks.add(hashlib.sha256(block).hexdigest())
+            pending = pending[full:]
+            yield data
+    measured = measure(feed())
     samples = {sample.hex() for sample in (head, tail) if any(sample)}
-    return {"path": entry["path"], "inode": entry["inode"], "sha256": sha.hexdigest(), "size": length}, blocks, samples
+    return {"path": entry["path"], "inode": entry["inode"], **measured}, blocks, samples
 
 
 def content(image, entry, fd):
@@ -137,7 +142,11 @@ def erase_with(adapter, path, internal_path, confirmation, evidence_dir, progres
                 progress("Fingerprint", (index+1)/max(len(entries), 1), "Hashing selected and preserved allocated files")
         file_hashes = {entry["sha256"] for entry in selected_files if entry["size"]}
         references = {"block_size": 512, "block_hashes": sorted(hashes), "metadata_patterns": sorted(patterns),
-                      "file_hashes": sorted(file_hashes)}
+                      "file_hashes": sorted(file_hashes),
+                      "block_hashes_4096": sorted({h for f in selected_files for h in f["block_hashes_4096"]}),
+                      "fuzzy_hashes": sorted({f["ssdeep"] for f in selected_files if f["size"]}), "fuzzy_threshold": 70}
+        from .engine import validate_references
+        references = validate_references(references)
         job = "ep-"+uuid.uuid4().hex
         prepared["target_files"] = selected_files
         prepared["reference_manifest_sha256"] = digest(references)
@@ -170,10 +179,16 @@ def erase_with(adapter, path, internal_path, confirmation, evidence_dir, progres
             duplicate_files = [entry for entry in preserved if entry["size"] and entry["sha256"] in file_hashes]
             duplicate_hashes = {entry["sha256"] for entry in duplicate_files}
             result["reference_count"] += len(file_hashes)
+            similar_files = []
+            from .fingerprints import matches
+            for entry in preserved:
+                if found := matches(entry["ssdeep"], references["fuzzy_hashes"], references["fuzzy_threshold"]):
+                    similar_files.append({"path": entry["path"], "matches": found})
+            result["similar_live_files"] = similar_files
             result["matching_live_file_hashes"] = duplicate_files
-            result["rrs"] = (result["matched_reference_blocks"]+result["metadata_residues"]+len(duplicate_hashes))/max(1, result["reference_count"])
+            result["rrs"] = (result["matched_reference_blocks"]+len(result["matched_4096_blocks"])+result["metadata_residues"]+len(duplicate_hashes)+len(similar_files)+len(result["fuzzy_findings"]))/max(1, result["reference_count"])
             result["history_verification"] = adapter.verify_history(stream)
-            result["passed"] = result["rrs"] == 0 and result["history_verification"]["passed"]
+            result["passed"] = result["rrs"] == 0 and not similar_files and not result["fuzzy_findings"] and result["history_verification"]["passed"]
             if os.fstat(fd).st_size != info["size"]:
                 raise EraseProofError("Image size changed during the operation.")
             result["volume_nonzero_bytes"] = result.pop("nonzero_bytes")

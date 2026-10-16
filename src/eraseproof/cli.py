@@ -93,6 +93,8 @@ def parser():
     sub.add_parser("doctor", help="Inspect Linux runtime and installed forensic tools")
     sub.add_parser("devices", help="Read-only Linux block-device inventory")
     sub.add_parser("desktop", help="Launch the native Qt application")
+    fp = sub.add_parser("fingerprint", help="Read an ordinary file and emit SHA-256/4 KiB/ssdeep references")
+    fp.add_argument("target")
     ds = sub.add_parser("demo", help="Create or normally delete files in a real FAT32 demo image")
     ds.add_argument("action", choices=["create", "delete"])
     ds.add_argument("directory")
@@ -212,6 +214,18 @@ def main(argv=None):
                       "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":
             output = devices()
+        elif args.command == "fingerprint":
+            from .fingerprints import measure
+            from .targets import open_target
+            info = describe(args.target)
+            if info["kind"] != "image":
+                raise EraseProofError("Fingerprint a single ordinary file, not an entire device.")
+            with open_target(args.target) as source:
+                measured = measure(iter(lambda: source.read(carve.CHUNK), b""))
+            output = {"file": info["path"], "fingerprint": measured,
+                      "references": {"block_size": 4096, "block_hashes": measured["block_hashes_4096"],
+                                     "file_hashes": [measured["sha256"]], "fuzzy_hashes": [measured["ssdeep"]],
+                                     "fuzzy_threshold": 70}}
         elif args.command == "demo":
             output = demo.create(args.directory, args.deleted) if args.action == "create" else demo.delete(args.directory)
         elif args.command == "recover":

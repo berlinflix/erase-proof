@@ -2,6 +2,8 @@
 set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 mkdir -p src/eraseproof/resources/native
+fuzzy_library="$(cc -print-file-name=libfuzzy.so.2)"
+cp --dereference "$fuzzy_library" src/eraseproof/resources/native/libfuzzy.so.2
 cc -std=c11 -O2 -fPIC -shared -Wall -Wextra -Werror \
   -D_FORTIFY_SOURCE=2 -fstack-protector-strong -Wl,-z,relro,-z,now \
   native/io.c -o src/eraseproof/resources/native/liberaseproof_io.so

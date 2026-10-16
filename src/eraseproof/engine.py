@@ -27,6 +27,16 @@ def validate_references(references):
     hashes = refs.get("block_hashes", [])
     file_hashes = refs.get("file_hashes", [])
     patterns = refs.get("metadata_patterns", [])
+    from .fingerprints import valid_signature, MAX_REFERENCES
+    fuzzy = refs.get("fuzzy_hashes", [])
+    threshold = refs.get("fuzzy_threshold", 70)
+    hashes_4096 = refs.get("block_hashes_4096", [])
+    if not isinstance(fuzzy, list) or len(fuzzy) > MAX_REFERENCES or any(not valid_signature(h) for h in fuzzy):
+        raise EraseProofError("Invalid ssdeep references or reference count exceeds 1024.")
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or not 1 <= threshold <= 100:
+        raise EraseProofError("Fuzzy threshold must be an integer from 1 through 100.")
+    if not isinstance(hashes_4096, list) or any(not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes_4096):
+        raise EraseProofError("Invalid 4 KiB reference hashes.")
     if not isinstance(hashes, list) or any(not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes):
         raise EraseProofError("Reference hashes must be lowercase SHA-256 values.")
     if not isinstance(file_hashes, list) or any(not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h) for h in file_hashes):
@@ -34,7 +44,8 @@ def validate_references(references):
     if not isinstance(patterns, list) or any(not isinstance(p, str) or not re.fullmatch(r"(?:[0-9a-fA-F]{2}){1,65536}", p) for p in patterns):
         raise EraseProofError("Metadata patterns must be hex strings containing 1–65536 bytes.")
     return {"block_size": block_size, "block_hashes": sorted(set(hashes)), "metadata_patterns": sorted(set(p.lower() for p in patterns)),
-            "file_hashes": sorted(set(file_hashes))}
+            "file_hashes": sorted(set(file_hashes)), "block_hashes_4096": sorted(set(hashes_4096)),
+            "fuzzy_hashes": sorted(set(fuzzy)), "fuzzy_threshold": threshold}
 
 
 def hash_stream(stream, length, cancel=None):
@@ -68,7 +79,8 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
         raise EraseProofError("Metadata patterns must contain 1–65536 bytes.")
     matched_hashes, matched_patterns = set(), set()
     block_findings, pattern_findings = [], []
-    nonzero, checked, carry = 0, 0, b""
+    nonzero, checked, carry, hash_carry = 0, 0, b"", b""
+    hashes_4096, matched_4096 = set(refs["block_hashes_4096"]), set()
     digest = hashlib.sha256()
     try:
         stream.seek(0)
@@ -79,6 +91,14 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
                 raise EraseProofError("Short read during complete verification.")
             digest.update(data)
             nonzero += len(data)-data.count(0)
+            if hashes_4096:
+                window = hash_carry+data
+                base = checked-len(hash_carry)
+                for at in range((-base) % 512, len(window)-4096+1, 512):
+                    block = window[at:at+4096]
+                    if block != bytes(4096) and (value := hashlib.sha256(block).hexdigest()) in hashes_4096:
+                        matched_4096.add(value)
+                hash_carry = window[-3584:]
             if block_hashes:
                 for offset in range(0, len(data), block_size):
                     block = data[offset:offset+block_size]
@@ -100,14 +120,33 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
                 progress("Verify", .6*checked/max(length, 1), f"Read back {checked:,} bytes; {nonzero:,} nonzero bytes")
         files = carve.scan(path, stream=stream, length=length, cancel=cancel,
                            progress=(lambda _, p, m: progress("Attack", .6+.4*p, m)) if progress else None)
-        denominator = len(block_hashes)+len(patterns)
+        fuzzy_findings = []
+        if refs["fuzzy_hashes"]:
+            from .fingerprints import FuzzyHash, matches
+            for candidate in files:
+                with FuzzyHash() as fuzzy:
+                    for at, count in candidate.segments or [[candidate.offset, candidate.length]]:
+                        stream.seek(at)
+                        while count:
+                            carve.checkpoint(cancel)
+                            data = stream.read(min(count, carve.CHUNK))
+                            if not data:
+                                raise EraseProofError("Short read during fuzzy verification.")
+                            fuzzy.update(data)
+                            count -= len(data)
+                    found = matches(fuzzy.hexdigest(), refs["fuzzy_hashes"], refs["fuzzy_threshold"])
+                    if found:
+                        fuzzy_findings.append({"offset": candidate.offset, "length": candidate.length, "matches": found})
+        fuzzy_indices = {match["reference_index"] for finding in fuzzy_findings for match in finding["matches"]}
+        denominator = len(block_hashes)+len(hashes_4096)+len(patterns)+len(refs["fuzzy_hashes"])
         return {"passed": nonzero == 0 and not files and not matched_hashes and not matched_patterns,
                 "bytes_checked": checked, "nonzero_bytes": nonzero, "sha256": digest.hexdigest(),
                 "carved_candidates": [c.to_dict() for c in files], "matched_reference_blocks": len(matched_hashes),
                 "metadata_residues": len(matched_patterns), "reference_count": denominator,
                 "reference_block_findings": block_findings, "metadata_findings": pattern_findings,
                 "finding_limit": 1000,
-                "rrs": (len(matched_hashes)+len(matched_patterns))/denominator if denominator else None,
+                "matched_4096_blocks": sorted(matched_4096), "fuzzy_findings": fuzzy_findings,
+                "rrs": (len(matched_hashes)+len(matched_4096)+len(matched_patterns)+len(fuzzy_indices))/denominator if denominator else None,
                 "scope": "Full logical-range zero read-back plus contiguous carving and provided aligned references; not physical storage, snapshots, hidden areas or firmware verification."}
     finally:
         if owned:
