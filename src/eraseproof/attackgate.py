@@ -13,6 +13,7 @@ from .matching import Matcher
 def scan_file(path, refs, cancel=None):
     block_size = refs["block_size"]
     hashes = set(refs["block_hashes"])
+    zero_block = bytes(block_size)
     patterns = [bytes.fromhex(pattern) for pattern in refs["metadata_patterns"]]
     matcher = Matcher(patterns)
     overlap = max([block_size-512, *(len(pattern)-1 for pattern in patterns)])
@@ -25,7 +26,7 @@ def scan_file(path, refs, cancel=None):
             if hashes:
                 for at in range((-base) % 512, len(window)-block_size+1, 512):
                     block = window[at:at+block_size]
-                    if any(block) and (value := hashlib.sha256(block).hexdigest()) in hashes:
+                    if block != zero_block and (value := hashlib.sha256(block).hexdigest()) in hashes:
                         blocks.add(value)
             metadata.update(index for _, index in matcher.first(window))
             carry = window[-overlap:] if overlap else b""

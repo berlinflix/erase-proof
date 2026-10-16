@@ -43,6 +43,9 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-extracted-") as temporary:
     binary = Path(temporary)/"EraseProof"/"EraseProof"
     doctor = json.loads(subprocess.run([str(binary), "--cli", "doctor"], capture_output=True, text=True, check=True).stdout)
     assert doctor["version"] == version
+    provenance = json.loads((binary.parent/'BUILD-SOURCE.json').read_text())
+    assert provenance['software_version'] == version
+    assert provenance['tracked_worktree_modified'] is False, 'Commit verified source/docs before the final release package.'
     assert doctor["native_direct_io"] and doctor["offline_ext4_adapter"]
     assert (binary.parent/"THIRD-PARTY-LICENSES"/"Qt-and-PySide"/"LGPL-3.0.txt").is_file()
     gui = subprocess.Popen([str(binary)], env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "HOME": temporary}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

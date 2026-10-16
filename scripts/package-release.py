@@ -4,6 +4,7 @@ from pathlib import Path
 import tarfile
 import zipfile
 import importlib.metadata
+import json
 import shutil
 import subprocess
 from release_permissions import file_mode
@@ -17,6 +18,15 @@ from eraseproof import __version__ as version
 binary = root/"dist"/"EraseProof"
 if not (binary/"EraseProof").exists():
     raise SystemExit("Build the Linux executable first.")
+shipped_version = subprocess.run([str(binary/'EraseProof'), '--cli', '--version'], capture_output=True, text=True, check=True).stdout.strip()
+if shipped_version != version:
+    raise SystemExit('Executable/source version mismatch. Rebuild before packaging.')
+revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, text=True)
+tracked = subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=root, capture_output=True)
+(binary/'BUILD-SOURCE.json').write_text(json.dumps({'software_version': version,
+    'git_commit': revision.stdout.strip() if revision.returncode == 0 else None,
+    'tracked_worktree_modified': tracked.returncode != 0,
+    'provenance': 'Packaging metadata; not an independent reproducible-build attestation.'}, indent=2)+'\n')
 
 for name in ("cryptography", "Pillow", "pypdf", "reportlab", "qrcode", "pyahocorasick", "PySide6-Essentials", "shiboken6", "cffi", "pyinstaller", "typing_extensions", "charset-normalizer", "pycparser"):
     distribution = importlib.metadata.distribution(name)

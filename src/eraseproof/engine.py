@@ -60,6 +60,7 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
     if block_size not in (512, 4096):
         raise EraseProofError("Reference block size must be 512 or 4096.")
     block_hashes = set(refs.get("block_hashes", []))
+    zero_block = bytes(block_size)
     patterns = [bytes.fromhex(p) for p in refs.get("metadata_patterns", [])]
     from .matching import Matcher
     matcher = Matcher(patterns)
@@ -81,7 +82,7 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
             if block_hashes:
                 for offset in range(0, len(data), block_size):
                     block = data[offset:offset+block_size]
-                    if any(block):
+                    if block != zero_block[:len(block)]:
                         hash_value = hashlib.sha256(block).hexdigest()
                         if hash_value in block_hashes:
                             if hash_value not in matched_hashes and len(block_findings) < 1000:
