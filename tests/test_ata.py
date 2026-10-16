@@ -63,6 +63,13 @@ def test_ata_unsafe_state_never_produces_erase_plan(mutation):
         prepare(data, method)
 
 
+def test_enhanced_erase_cannot_start_while_sanitize_is_busy():
+    data = discovery()
+    data['ata']['sanitize_status']['busy'] = True
+    with pytest.raises(EraseProofError, match='busy'):
+        prepare(data, 'enhanced-secure-erase')
+
+
 def test_native_ata_wire_commands_and_regular_file_refusal(tmp_path):
     lib = firmware.library()
     cdb = ctypes.create_string_buffer(16)

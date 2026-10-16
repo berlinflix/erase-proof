@@ -61,3 +61,37 @@ def test_missing_baseline_refused_before_firmware_or_evidence(tmp_path, monkeypa
     with pytest.raises(EraseProofError, match='baseline'):
         workflow.run(data['path'], ['block-erase'], data['path'], data['serial'], tmp_path/'evidence', {})
     assert not (tmp_path/'evidence').exists()
+
+
+def test_changed_namespace_after_attack_never_receives_certificate(tmp_path, monkeypatch):
+    data = fixture(monkeypatch)
+    monkeypatch.setattr(media, 'submit_nvme', lambda *a, **kw: {})
+    monkeypatch.setattr(media, 'nvme_status', lambda _: {'serial': data['serial'], 'state': 'firmware-reports-success', 'log': {'scdw10': 4}})
+    def attack(*args):
+        data['namespaces'][0]['device']['size'] += 512
+        return {'verification': {'passed': True, 'bytes_checked': 8192}}
+    monkeypatch.setattr(workflow, 'attack_namespace', attack)
+    with pytest.raises(EraseProofError, match='changed during'):
+        run(data, tmp_path/'case')
+    assert not EvidenceStore(tmp_path/'case').records()
+
+
+def test_attack_rejects_replaced_device_before_scanning(tmp_path, monkeypatch):
+    import eraseproof.targets as targets
+    path = tmp_path/'replacement.img'
+    path.write_bytes(bytes(8192))
+    expected = {'name': str(path), 'size': 8192, 'serial': 'ORIGINAL', 'model': 'ORIGINAL'}
+    monkeypatch.setattr(targets, 'describe', lambda _: {'path': str(path), 'size': 8192, 'serial': 'REPLACEMENT', 'model': 'ORIGINAL'})
+    with pytest.raises(EraseProofError, match='changed before'):
+        workflow.attack_namespace(path, {}, tmp_path/'attack', expected_device=expected)
+    assert not (tmp_path/'attack').exists()
+
+
+def test_overwrite_rejects_target_replacement_before_creating_evidence(tmp_path):
+    from eraseproof import engine
+    path = tmp_path/'replacement.img'
+    path.write_bytes(b'preserve original bytes')
+    expected = {'path': str(path), 'size': path.stat().st_size, 'serial': 'ORIGINAL', 'model': 'Raw image file'}
+    with pytest.raises(EraseProofError, match='differs from'):
+        engine.erase(path, path.name, tmp_path/'case', expected_target=expected)
+    assert path.read_bytes() == b'preserve original bytes' and not (tmp_path/'case').exists()

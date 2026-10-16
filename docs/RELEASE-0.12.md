@@ -23,8 +23,9 @@ as complete.
   HPA/DCO expansion and post-command checks.
 - Private persisted ATA recovery credentials before security changes, explicit
   recovery after interruption, and no credentials in argv/audit/stdout.
-- Confirmed controller-wide erase/attack/escalate/certify workflows; incomplete
-  status/attacks and changed identity stop without automatic retry.
+- Confirmed NVMe/ATA erase/attack/escalate/certify workflows; incomplete
+  status/attacks, stale ATA sanitize success and changed identity/capacity stop
+  without automatic retry. Identity is checked again after recovery attacks.
 - Allowlisted host-visible disk overwrite and separate discard receipts; boot,
   mounted, swap, read-only and holder checks remain required.
 - Read-only LUKS/BitLocker signatures, partition signatures and bounded TCG Level 0

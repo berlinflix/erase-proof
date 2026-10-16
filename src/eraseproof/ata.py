@@ -116,6 +116,9 @@ def plan(discovery, method, allow_device, confirmation, open_hidden=False, capac
         raise EraseProofError("Hidden HPA/DCO capacity requires --open-hidden and --capacity-sectors matching the discovered factory range.")
     if info["security"]["locked"] or info["security"]["expired"]:
         raise EraseProofError("ATA security is locked or attempts expired; no new erase may start.")
+    status = info.get('sanitize_status', {})
+    if info['sanitize_supported'] and ('flags' not in status or status.get('busy')):
+        raise EraseProofError('ATA sanitize state is unknown or busy; no erase or capacity change may start.')
     if method in ("sanitize-crypto", "sanitize-block"):
         action = "sanitize_crypto" if method == "sanitize-crypto" else "sanitize_block"
         if not info["sanitize_supported"] or not info[action]:
@@ -167,12 +170,15 @@ def credential(password, enhanced=False):
     return buffer
 
 
-def submit(path, method, allow_device, confirmation, evidence_dir, open_hidden=False, capacity_sectors=None):
+def submit(path, method, allow_device, confirmation, evidence_dir, open_hidden=False, capacity_sectors=None, *, expected_identity=None):
     from .media import outside_devices
     if os.geteuid() != 0:
         raise EraseProofError("ATA execution requires an explicit root CLI invocation.")
     target, root = device_gate(path, allow_device, confirmation, writing=True)
     discovery = probe(path)
+    observed = discovery['ata']
+    if expected_identity is not None and (observed['serial'], observed['model'], observed['sector_bytes'], observed['dco_sectors']) != expected_identity:
+        raise EraseProofError('ATA identity or factory capacity differs from the confirmed workflow; no command sent.')
     prepared = plan(discovery, method, allow_device, confirmation, open_hidden, capacity_sectors)
     outside_devices(evidence_dir, [root])
     store = EvidenceStore(evidence_dir)

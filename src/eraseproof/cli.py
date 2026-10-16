@@ -231,6 +231,18 @@ def parser():
             operation.add_argument("--case", required=True)
     ata_status = sub.add_parser("ata-status", help="Read ATA identity, hidden capacity and sanitize/security state")
     ata_status.add_argument("target")
+    for name in ('ata-workflow-plan', 'ata-run'):
+        operation = sub.add_parser(name, help='Plan/run confirmed ATA erase, attack, escalation and logical certification')
+        operation.add_argument('target')
+        operation.add_argument('--methods', nargs='+', choices=['sanitize-crypto', 'sanitize-block', 'enhanced-secure-erase', 'logical-overwrite'], required=True)
+        operation.add_argument('--allow-device', required=True)
+        operation.add_argument('--confirm', required=True)
+        operation.add_argument('--open-hidden', action='store_true')
+        operation.add_argument('--capacity-sectors', type=int)
+        if name == 'ata-run':
+            operation.add_argument('--case', required=True)
+            operation.add_argument('--references', required=True)
+            operation.add_argument('--timeout', type=int, default=3600)
     security_recover = sub.add_parser("ata-recover-security", help="Explicitly unlock/disable the saved temporary ATA password after an interrupted erase")
     security_recover.add_argument("target")
     security_recover.add_argument("--allow-device", required=True)
@@ -300,6 +312,13 @@ def main(argv=None):
         elif args.command == "ata-status":
             from .ata import probe
             output = probe(args.target)
+        elif args.command in ('ata-workflow-plan', 'ata-run'):
+            from . import ata, ataworkflow
+            output = (ataworkflow.plan(ata.probe(args.target), args.methods, args.allow_device, args.confirm,
+                                      args.open_hidden, args.capacity_sectors) if args.command.endswith('plan') else
+                      ataworkflow.run(args.target, args.methods, args.allow_device, args.confirm, args.case,
+                                      references(args.references), open_hidden=args.open_hidden,
+                                      capacity_sectors=args.capacity_sectors, timeout=args.timeout, progress=progress))
         elif args.command == "device-plan":
             output = plan(args.target, args.allow_device, args.confirm, host_device=True)
         elif args.command == "device-erase":

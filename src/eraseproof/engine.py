@@ -172,12 +172,14 @@ def plan(path, allow_device=None, confirmation=None, *, host_device=False):
             "warning": "This changes the actual selected file or guest-visible virtual disk, including its filesystem."}
 
 
-def erase(path, confirmation, evidence_dir, references=None, allow_device=None, progress=None, cancel=None, *, host_device=False):
+def erase(path, confirmation, evidence_dir, references=None, allow_device=None, progress=None, cancel=None, *, host_device=False, expected_target=None):
     from . import attackgate
     started_at, started = now(), time.monotonic()
     references = validate_references(references)  # Reject invalid jobs before the first destructive write.
     prepared = plan(path, allow_device, confirmation, host_device=host_device)
     target = prepared["target"]
+    if expected_target is not None and any(target.get(key) != expected_target.get(key) for key in ('path', 'size', 'serial', 'model')):
+        raise EraseProofError('Overwrite target differs from the confirmed workflow; no write started.')
     if confirmation != target["serial"]:
         raise EraseProofError("Type the exact image filename or virtual-device serial to confirm.")
     attackgate.require_tools()

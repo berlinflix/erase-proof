@@ -58,10 +58,16 @@ def wait(controller, serial, timeout, store, job, cancel=None, progress=None, ex
         time.sleep(.5)
 
 
-def attack_namespace(path, refs, folder, cancel=None, progress=None):
+def attack_namespace(path, refs, folder, cancel=None, progress=None, expected_device=None):
     with open_target(path, writable=True) as source:
         from .targets import describe
         target = describe(path)
+        if expected_device is not None:
+            expected = (str(expected_device['name']), int(expected_device['size']),
+                        (expected_device.get('serial') or '').strip(), (expected_device.get('model') or '').strip())
+            actual = (target['path'], target['size'], (target.get('serial') or '').strip(), (target.get('model') or '').strip())
+            if actual != expected:
+                raise EraseProofError('Device identity or capacity changed before the recovery attack; certification refused.')
         result = verify(path, refs, progress, cancel, source, target['size'])
         independent = attackgate.check(path, folder, refs, stream=source, length=target['size'],
             expected_sha256=result['sha256'], zero_readback=result['nonzero_bytes'] == 0, progress=progress, cancel=cancel)
@@ -111,11 +117,15 @@ def run(controller, methods, allow_controller, confirmation, evidence_dir, refer
             for namespace in initial['namespaces']:
                 checkpoint(cancel)
                 findings.append(attack_namespace(namespace['device']['name'], refs,
-                    store.root/(job+f'.round-{index}.ns-{namespace["id"]}'), cancel, progress))
+                    store.root/(job+f'.round-{index}.ns-{namespace["id"]}'), cancel, progress, namespace['device']))
             measured = {'method': method, 'receipt': receipt, 'findings': findings}
             rounds.append(measured)
             store.append('workflow.round', {'job': job, **measured})
             if all(f['verification']['passed'] for f in findings):
+                final = media.nvme_probe(controller)
+                media.nvme_gate(final, allow_controller, confirmation)
+                if final['namespace_ids'] != prepared['namespace_ids'] or digest(final['namespaces']) != digest(prepared['namespaces']):
+                    raise EraseProofError('Controller namespaces changed during the recovery attack; certification refused.')
                 result = {'passed': True, 'rrs': 0, 'bytes_checked': sum(f['verification']['bytes_checked'] for f in findings),
                           'independent_attack': {'passed': True}, 'rounds': rounds, 'scope': prepared['scope'],
                           'all_filesystem_copies_verified': False}

@@ -60,6 +60,27 @@ and all three capacities must agree afterward. DCO restore permanently resets
 configuration; a kernel re-probe/reboot may be required before block I/O sees
 the expanded range. Rejected/frozen changes remain failures.
 
+`ata-workflow-plan` / `ata-run` coordinate a confirmed sequence of advertised
+sanitize, Enhanced Secure Erase and final logical-overwrite methods. Retained
+target references are mandatory. Every round attacks the full factory range,
+rechecks device identity and visible/native/DCO capacity, and refuses incomplete
+or inconclusive attacks. Only observed residue after a completed round advances
+to another method which the operator already confirmed.
+
+Unlike NVMe, ATA sanitize status has no matching action log. The automatic
+workflow therefore requires an observed busy-to-success transition. A fast
+operation which finishes before busy is observed remains uncorrelated: inspect
+it manually, and do not automatically retry or issue a workflow certificate.
+Enhanced Secure Erase uses its synchronous completion and disabled/unlocked
+readback. A pending/unknown sanitize operation blocks other erase/capacity writes.
+
+```bash
+sudo eraseproof ata-workflow-plan /dev/sdX \
+  --methods enhanced-secure-erase logical-overwrite \
+  --allow-device /dev/sdX --confirm EXACT_SERIAL
+# ata-run additionally requires --references BASELINE.json --case OTHER_DEVICE_CASE
+```
+
 ## Overwrite, discard and encryption
 
 `device-plan` / `device-erase` add explicitly allowlisted complete host-visible

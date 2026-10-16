@@ -116,6 +116,9 @@ def device_policy(path, confirmation, allow_device):
     if root.get('tran') in ('sata', 'ata'):
         from .ata import probe
         current = probe(path)['ata']
+        security, status = current['security'], current.get('sanitize_status', {})
+        if security['enabled'] or security['locked'] or security['expired'] or current['sanitize_supported'] and ('flags' not in status or status.get('busy')):
+            raise EraseProofError('ATA security or sanitize state is not ready for logical disk writes.')
         if current['visible_sectors'] != current['native_sectors'] or current['native_sectors'] != current['dco_sectors']:
             raise EraseProofError('Open and re-probe hidden HPA/DCO capacity with an explicit ATA plan before a full disk overwrite.')
         hidden = {'state': 'no-capacity-reduction-reported', 'ata': current}
