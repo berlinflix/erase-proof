@@ -123,7 +123,14 @@ static int clean_slack(ext2_ino_t dir, int entry, struct ext2_dir_entry *de,
     if (record < 8 || record > (unsigned)(size-offset)) fail("Invalid directory bounds.");
     if (entry == DIRENT_CHECKSUM) return 0;
     /* HTREE interior maps occupy fake empty entries or the dotdot tail. */
-    if (state->indexed && (entry == DIRENT_DOT_DOT_FILE || (!de->inode && !offset))) return 0;
+    if (state->indexed && entry == DIRENT_DOT_DOT_FILE) return 0;
+    if (state->indexed && !de->inode && !offset && record == (unsigned)size &&
+        ext2fs_dirent_name_len(de) == 0) {
+        struct ext2_dx_countlimit *counts;
+        if (!ext2fs_get_dx_countlimit(fs, (struct ext2_dir_entry *)buffer, &counts, NULL) &&
+            ext2fs_le16_to_cpu(counts->count) > 0 && ext2fs_le16_to_cpu(counts->limit) > 0)
+            return 0;
+    }
     used = de->inode ? 8U+ext2fs_dirent_name_len(de) : 8U;
     if (used > record) fail("Invalid directory name length.");
     if (!de->inode) de->name_len = 0;

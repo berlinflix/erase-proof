@@ -6,6 +6,7 @@ import struct
 import zipfile
 import zlib
 import io
+import re
 
 from .models import Candidate, Cancelled, EraseProofError
 from .targets import describe, open_target
@@ -22,11 +23,56 @@ def checkpoint(cancel):
         raise Cancelled("Operation cancelled. A partially overwritten target is not certified.")
 
 
+def identify_pdf(stream, offset, limit):
+    """Require a resolving startxref, preserve EOF EOL, follow contiguous updates."""
+    cursor, carry, previous = offset+5, b"", None
+    while cursor < limit:
+        stream.seek(cursor)
+        data = stream.read(min(CHUNK, limit-cursor))
+        if not data:
+            break
+        window, base = carry+data, cursor-len(carry)
+        at = window.find(b"%%EOF")
+        while at >= 0:
+            end = base+at+5
+            start = max(offset, end-256)
+            stream.seek(start)
+            trailer = stream.read(end-start)
+            match = re.search(rb"startxref\s+(\d+)\s+%%EOF$", trailer)
+            valid = False
+            if match:
+                xref = offset+int(match[1])
+                if offset < xref < end:
+                    stream.seek(xref)
+                    head = stream.read(min(32, end-xref))
+                    valid = head.startswith(b"xref") or bool(re.match(rb"\d+\s+\d+\s+obj\b", head))
+            if valid:
+                stream.seek(end)
+                eol = stream.read(min(2, limit-end))
+                end += 2 if eol.startswith(b"\r\n") else 1 if eol[:1] in (b"\r", b"\n") else 0
+                previous = Candidate(offset, end-offset, "PDF", 80,
+                                     ["PDF trailer has a resolving startxref", "Final EOF line ending preserved"])
+                stream.seek(end)
+                following = stream.read(min(4096, limit-end)).lstrip(b" \t\r\n")
+                if not re.match(rb"(?:\d+\s+\d+\s+obj\b|xref\b|trailer\b)", following):
+                    return previous
+            at = window.find(b"%%EOF", at+5)
+        carry = window[-4:]
+        cursor += len(data)
+    if previous:
+        previous.method = "pdf-earlier-revision"
+        previous.confidence = 55
+        previous.evidence.append("A contiguous incremental update is incomplete; this is an earlier valid revision, not the complete original file")
+    return previous
+
+
 def identify(stream, offset, kind, total, max_candidate=MAX_CANDIDATE):
     if kind not in ("PNG", "PDF", "JPEG", "ZIP"):
         return formats.identify(stream, offset, kind, total, max_candidate)
     limit = min(total, offset + max_candidate)
     stream.seek(offset)
+    if kind == "PDF":
+        return identify_pdf(stream, offset, limit)
     if kind == "PNG":
         if stream.read(8) != SIGNATURES[0][0]:
             return None
@@ -209,7 +255,7 @@ def extract(path, candidate, output_dir):
     validation = isolated(destination, candidate.file_type)
     candidate.evidence.append(validation["detail"])
     if validation["status"] == "valid":
-        candidate.confidence = max(candidate.confidence, 98)
+        candidate.confidence = max(candidate.confidence, 98) if candidate.method != "pdf-earlier-revision" else min(candidate.confidence, 55)
     elif validation["status"] == "invalid":
         candidate.confidence = min(candidate.confidence, 35)
     return candidate

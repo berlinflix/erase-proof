@@ -307,7 +307,7 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        options, settings = panel("Recover deleted data", "The source is opened read-only. Choose an output directory on a different disk when recovering a real device.")
+        options, settings = panel("Recover deleted data", "Select the affected disk or a filesystem image after ordinary deletion. Originals and reference lists are not required. The source is opened read-only; use a different disk for recovered output.")
         self.recovery_source = QLineEdit()
         self.source_row(settings, self.recovery_source)
         destination = QHBoxLayout()
@@ -557,7 +557,7 @@ class MainWindow(QMainWindow):
 
     def switch(self, index):
         titles = [("The recovery experiment", "A reproducible filesystem experiment for your Ubuntu VM."),
-                  ("See what survives.", "Filesystem metadata recovery and native contiguous file carving."),
+                  ("See what survives.", "Filesystem metadata, ext4 journal history and native file carving."),
                   ("Erase. Attack. Verify.", "Measured logical erasure, with explicit target identity and evidence."),
                   ("Keep the proof.", "Signed results and a transactional, hash-chained audit history."),
                   ("Know your target.", "Inspect actual Linux devices before preparing an operation.")]
@@ -658,9 +658,10 @@ class MainWindow(QMainWindow):
         output = Path(destination).expanduser()/(datetime.now().strftime("%Y%m%d-%H%M%S")+"-"+uuid.uuid4().hex[:6])
         mode = ("both", "deleted", "carve")[self.mode.currentIndex()]
         def done(report):
-            self.recovered = report["candidates"]
-            fill_table(self.results, [(c["name"], "Filesystem" if c["method"] == "sleuthkit-metadata" else "Carving", c["length"], c["sha256"]) for c in self.recovered])
-            self.status_label.setText(f"Recovery complete: {len(self.recovered)} findings saved to {output}" + (" · "+"; ".join(report["warnings"]) if report["warnings"] else ""))
+            self.recovered = [c for c in report["candidates"] if c["length"] > 0]
+            methods = {"sleuthkit-metadata": "Filesystem", "ext4-journal-inode": "Ext4 journal", "pdf-earlier-revision": "Earlier PDF revision"}
+            fill_table(self.results, [(c["name"], methods.get(c["method"], "Carving"), c["length"], c["sha256"]) for c in self.recovered])
+            self.status_label.setText(f"Recovery complete: {len(self.recovered)} nonempty findings saved to {output}" + (f" · {len(report['warnings'])} warnings recorded in recovery.json" if report["warnings"] else ""))
             self.progress_bar.setValue(1000)
         fragmented = self.fragments.isChecked()
         try:

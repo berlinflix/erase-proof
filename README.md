@@ -30,6 +30,13 @@ The optional [Ubuntu 24.04 live-image workflow](docs/LIVE-UBUNTU.md) builds a se
 
 The original sample files remain outside the experiment image as **ground truth**, so the recovery hashes can be checked. Erasing the experiment does not erase these intentional originals or previously extracted evidence.
 
+Recovery also works with ordinary deletion outside this experiment. It requires
+no original file list or manifest. [Normal-deletion validation](docs/ORDINARY-DELETION.md)
+uses fresh, randomly named files deleted through mounted FAT32, ext4, NTFS and
+exFAT drivers, including plain text and unknown file extensions. Ext4 journal
+inode recovery complements signature carving when unlink has cleared current
+allocation metadata.
+
 ## CLI
 
 ```bash

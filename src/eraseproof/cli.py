@@ -43,25 +43,41 @@ def recover(path, output, mode="both", sector_offset=0, progress=None, cancel=No
                 raise EraseProofError("Recovery output is on the source disk. Select a different destination disk.")
     # Metadata and carving remain separate findings; duplicates are evidence,
     # rather than silently merged or counted as independently recovered files.
-    candidates, warnings = [], []
+    candidates, warnings, journal_summary = [], [], None
     if mode in ("deleted", "both"):
         try:
             found = tsk.deleted(path, sector_offset)
             for index, candidate in enumerate(found):
                 carve.checkpoint(cancel)
-                candidates.append(tsk.recover(path, candidate, Path(output)/"filesystem", sector_offset))
+                try:
+                    extracted = tsk.recover(path, candidate, Path(output)/"filesystem", sector_offset)
+                    candidates.append(extracted)
+                    if extracted.length == 0:
+                        warnings.append(f"{candidate.name}: metadata extraction produced zero bytes; no nonempty original content was recovered from this entry.")
+                except (EraseProofError, OSError) as error:
+                    warnings.append(f"{candidate.name}: metadata extraction failed: {error}")
                 if progress:
                     progress("Recover", (index+1)/max(len(found), 1), f"Recovered deleted metadata entry: {candidate.name}")
         except (EraseProofError, FileNotFoundError) as error:
             if mode == "deleted":
                 raise
             warnings.append(str(error))
+        from . import journal
+        if journal.applicable(path, sector_offset):
+            try:
+                found, journal_summary = journal.recover(path, Path(output)/"journal", progress, cancel)
+                candidates.extend(found)
+            except EraseProofError as error:
+                warnings.append("Ext4 journal recovery: "+str(error))
     if mode in ("carve", "both"):
         for candidate in carve.scan(path, progress=progress, cancel=cancel, fragmented=fragmented):
             carve.checkpoint(cancel)
             candidates.append(carve.extract(path, candidate, Path(output)/"carved"))
     report = {"source": describe(path), "mode": mode, "sector_offset": sector_offset,
               "candidates": [asdict(c) for c in candidates], "warnings": warnings,
+              "nonempty_outputs": sum(c.length > 0 for c in candidates),
+              "empty_metadata_outputs": sum(c.length == 0 and c.method == "sleuthkit-metadata" for c in candidates),
+              "journal_recovery": journal_summary,
               "limits": "Contiguous carving has a 256 MiB per-candidate limit. Metadata recovery depends on the filesystem and surviving allocation data. Confidence is a structural heuristic."}
     folder = Path(output)
     folder.mkdir(parents=True, exist_ok=True)
@@ -185,6 +201,7 @@ def main(argv=None):
                       "tools": {name: shutil.which(name) for name in ("lsblk", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm")},
                       "native_direct_io": library() is not None,
                       "offline_ext4_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4").is_file(),
+                      "ext4_journal_reader": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4-journal").is_file(),
                       "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":
             output = devices()
