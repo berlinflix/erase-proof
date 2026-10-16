@@ -17,6 +17,8 @@ Setup installs the real Ubuntu forensic/demo tools and creates an isolated Pytho
 
 The standalone Linux distribution, when supplied in `artifacts/`, contains a compiled launcher plus bundled Python/Qt libraries. Its README explains the remaining Ubuntu system-tool dependencies.
 
+The optional [Ubuntu 24.04 live-image workflow](docs/LIVE-UBUNTU.md) builds a separate bootable environment. Its build/boot status is tracked in [milestones](docs/MILESTONES.md); Oracle VirtualBox acceptance remains deferred.
+
 ## The demonstration
 
 1. **Experiment → Create FAT32 experiment.** `mkfs.fat` formats an actual 64 MiB image. `mcopy` puts a viewable PNG, a valid PDF, a ZIP and text into it. Their original SHA-256 values are recorded.
@@ -111,6 +113,7 @@ Cancellation of a real overwrite is **not reversible**: the target may be partia
 ## Development
 
 ```bash
+sudo apt-get install -y gcc ffmpeg p7zip-full
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[desktop,test]'
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q

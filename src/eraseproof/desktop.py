@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import uuid
+import subprocess
 
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon
@@ -12,7 +13,7 @@ from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow,
     QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QSizePolicy, QInputDialog,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QScrollArea,
 )
 
 from . import __version__, demo, tsk
@@ -22,6 +23,19 @@ from .evidence import EvidenceStore, verify_record
 from .targets import describe, devices, descendants
 from .files import plan_files, erase_files
 from .fat32 import Fat32, erase_path
+from .runtime import system_environment
+
+
+def open_local(path):
+    """Use system libraries when launching the user's external file viewer."""
+    if sys.platform.startswith("linux"):
+        try:
+            subprocess.Popen(["xdg-open", str(Path(path).resolve())], env=system_environment(),
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            return True
+        except OSError:
+            return False
+    return QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
 
 STYLE = """
@@ -136,9 +150,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("EraseProof — Native Linux workbench")
         self.setWindowIcon(QIcon(str(Path(__file__).parent/"resources"/"eraseproof.svg")))
-        self.resize(1240, 850)
-        self.setMinimumSize(1020, 710)
-        self.workspace = Path(workspace or Path.home()/"EraseProof").expanduser().resolve()
+        self.setMinimumSize(960, 680)
+        screen = QApplication.primaryScreen()
+        bounds = screen.availableGeometry() if screen else None
+        self.resize(min(1240, max(960, bounds.width()-24)) if bounds else 1240,
+                    min(850, max(680, bounds.height()-48)) if bounds else 850)
+        if bounds:
+            self.move(bounds.x()+12, bounds.y()+12)
+        self.workspace = Path(workspace or os.environ.get("ERASEPROOF_WORKSPACE") or Path.home()/"EraseProof").expanduser().resolve()
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.store = EvidenceStore(self.workspace/"evidence")
         self.target = ""
@@ -190,6 +209,12 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         top.addWidget(label("RESEARCH WORKSPACE / UBUNTU", "eyebrow"))
         top.addStretch()
+        try:
+            live = "boot=casper" in Path("/proc/cmdline").read_text()
+        except OSError:
+            live = False
+        if live:
+            top.addWidget(label("Live session · export evidence before shutdown", "tag"))
         top.addWidget(label("●  Native Qt · no browser", "tag"))
         main.addLayout(top)
         self.title = label("", "title")
@@ -197,7 +222,13 @@ class MainWindow(QMainWindow):
         main.addWidget(self.title)
         main.addWidget(self.subtitle)
         self.stack = QStackedWidget()
-        main.addWidget(self.stack, 1)
+        self.page_scroll = QScrollArea()
+        self.page_scroll.setWidgetResizable(True)
+        self.page_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.page_scroll.setWidget(self.stack)
+        self.stack.setAutoFillBackground(False)
+        self.page_scroll.viewport().setAutoFillBackground(False)
+        main.addWidget(self.page_scroll, 1)
         self._experiment()
         self._recovery()
         self._erasure()
@@ -210,6 +241,8 @@ class MainWindow(QMainWindow):
         status.setContentsMargins(16, 12, 16, 12)
         progress_row = QHBoxLayout()
         self.status_label = label("Ready. Create an experiment or open a disk image.")
+        self.status_label.setWordWrap(True)
+        self.status_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.cancel_button = button("Cancel operation", self.cancel)
         self.cancel_button.setEnabled(False)
         progress_row.addWidget(self.status_label, 1)
@@ -355,8 +388,11 @@ class MainWindow(QMainWindow):
         row.addWidget(button("Export signed JSON…", self.export_record))
         row.addWidget(button("Export PDF + QR…", self.export_pdf))
         row.addStretch()
+        box.addLayout(row)
+        row = QHBoxLayout()
         row.addWidget(button("Verify a record…", self.check_record))
         row.addWidget(button("Export audit…", self.export_audit))
+        row.addStretch()
         box.addLayout(row)
         layout.addWidget(evidence, 1)
         self.stack.addWidget(page)
@@ -516,6 +552,7 @@ class MainWindow(QMainWindow):
         self.title.setText(titles[index][0])
         self.subtitle.setText(titles[index][1])
         self.stack.setCurrentIndex(index)
+        self.page_scroll.verticalScrollBar().setValue(0)
         for i, item in enumerate(self.nav):
             item.setChecked(i == index)
 
@@ -638,7 +675,7 @@ class MainWindow(QMainWindow):
         def done(report):
             self.verification_details.setPlainText(json.dumps(report, indent=2))
             self.status_label.setText(f"Independent attack: {report['recovered_files']} files extracted. Coverage {'complete' if report['complete'] else 'incomplete; see exact tool statuses'}. Report: {output/'attack.json'}")
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(output)))
+            open_local(output)
         try:
             offset = int(self.sector_offset.text())
         except ValueError:
@@ -648,7 +685,8 @@ class MainWindow(QMainWindow):
     def open_recovered(self, *_):
         row = self.results.currentRow()
         if 0 <= row < len(self.recovered):
-            QDesktopServices.openUrl(QUrl.fromLocalFile(self.recovered[row]["output"]))
+            if not open_local(self.recovered[row]["output"]):
+                self.on_error("A file viewer could not be launched. Install xdg-utils and a viewer for this format.")
 
     def show_plan(self):
         try:
@@ -751,7 +789,7 @@ class MainWindow(QMainWindow):
         if path:
             try:
                 render(record, path)
-                QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+                open_local(path)
             except Exception as error:
                 self.on_error(str(error))
 

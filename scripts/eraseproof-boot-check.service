@@ -6,9 +6,8 @@ ConditionKernelCommandLine=eraseproof.selftest=1
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/eraseproof-boot-check
-StandardOutput=tty
-StandardError=tty
-TTYPath=/dev/ttyS0
+StandardOutput=journal+console
+StandardError=journal+console
 TimeoutStartSec=180
 
 [Install]

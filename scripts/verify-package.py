@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import zipfile
+import tarfile
 
 root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root/"src"))
@@ -25,9 +26,15 @@ for line in (artifacts/"SHA256SUMS").read_text().splitlines():
 with zipfile.ZipFile(artifacts/f"EraseProof-source-{version}.zip") as source:
     assert source.testzip() is None
     names = source.namelist()
+    assert all(not (info.external_attr >> 16) & 0o022 for info in source.infolist())
     assert any(n.endswith("src/eraseproof/desktop.py") for n in names)
     assert any(n.endswith("resources/fonts/LICENSE.txt") for n in names)
     assert not any(".venv" in n or "operator-ed25519.key" in n or "prototype-web" in n or n.endswith(".sqlite3") for n in names)
+with tarfile.open(artifacts/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz") as archive:
+    for item in archive:
+        assert item.uid == 0 and item.gid == 0
+        if item.isfile() or item.isdir():
+            assert not item.mode & 0o022, item.name
 with tempfile.TemporaryDirectory(prefix="eraseproof-extracted-") as temporary:
     subprocess.run(["tar", "-xzf", str(artifacts/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz"), "-C", temporary], check=True)
     binary = Path(temporary)/"EraseProof"/"EraseProof"

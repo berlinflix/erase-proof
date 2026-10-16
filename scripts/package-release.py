@@ -5,6 +5,7 @@ import tarfile
 import zipfile
 import importlib.metadata
 import shutil
+from release_permissions import file_mode
 
 root = Path(__file__).resolve().parent.parent
 output = root/"artifacts"
@@ -84,8 +85,16 @@ Keep the whole EraseProof folder together; the _internal directory is needed.
 shutil.copytree(root/"docs", binary/"docs", dirs_exist_ok=True)
 
 archive = output/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz"
+def archive_mode(info):
+    info.uid = info.gid = 0
+    info.uname = info.gname = "root"
+    if info.isdir():
+        info.mode = 0o755
+    elif info.isfile():
+        info.mode = file_mode(binary.parent/info.name)
+    return info
 with tarfile.open(archive, "w:gz") as file:
-    file.add(binary, arcname="EraseProof")
+    file.add(binary, arcname="EraseProof", filter=archive_mode)
 
 source = output/f"EraseProof-source-{version}.zip"
 paths = [root/name for name in ("README.md", "pyproject.toml", ".gitattributes", ".gitignore")]
@@ -93,7 +102,10 @@ for directory in ("src", "tests", "scripts", "docs"):
     paths.extend(p for p in (root/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc")
 with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as file:
     for path in sorted(paths):
-        file.write(path, arcname=str(Path(f"EraseProof-source-{version}")/path.relative_to(root)))
+        info = zipfile.ZipInfo.from_file(path, arcname=str(Path(f"EraseProof-source-{version}")/path.relative_to(root)))
+        info.external_attr = (0o100000 | file_mode(path)) << 16
+        info.compress_type = zipfile.ZIP_DEFLATED
+        file.writestr(info, path.read_bytes())
 
 checksums = []
 release_files = [archive, source]

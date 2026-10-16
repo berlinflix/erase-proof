@@ -37,7 +37,7 @@ iso="$work/iso"
 mkdir -p "$iso/casper" "$iso/boot/grub"
 echo "Managed build directory: $work"
 cleanup_mounts() {
-  for target in "$root/sys" "$root/proc"; do
+  for target in "$root/dev/pts" "$root/sys" "$root/proc"; do
     if mountpoint -q "$target"; then umount "$target" || true; fi
   done
 }
@@ -47,9 +47,9 @@ if [[ -z "$resume" ]]; then
     noble "$root" https://archive.ubuntu.com/ubuntu
 fi
 cat > "$root/etc/apt/sources.list" <<'EOF'
-deb https://archive.ubuntu.com/ubuntu noble main universe restricted multiverse
-deb https://archive.ubuntu.com/ubuntu noble-updates main universe restricted multiverse
-deb https://security.ubuntu.com/ubuntu noble-security main universe restricted multiverse
+deb https://archive.ubuntu.com/ubuntu noble main universe
+deb https://archive.ubuntu.com/ubuntu noble-updates main universe
+deb https://security.ubuntu.com/ubuntu noble-security main universe
 EOF
 cp --remove-destination /etc/resolv.conf "$root/etc/resolv.conf"
 cat > "$root/usr/sbin/policy-rc.d" <<'EOF'
@@ -59,6 +59,10 @@ EOF
 chmod 755 "$root/usr/sbin/policy-rc.d"
 mount -t proc proc "$root/proc"
 mount -t sysfs -o ro sysfs "$root/sys"
+mkdir -p "$root/dev/pts"
+mount -t devpts -o newinstance,ptmxmode=0666 devpts "$root/dev/pts"
+ln -sf pts/ptmx "$root/dev/ptmx"
+python3 "$scripts/fetch-ubuntu-indexes.py" "$root"
 chroot "$root" /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get update
 python3 "$scripts/fetch-ubuntu-packages.py" "$root" --apt
 mapfile -t packages < "$scripts/live-packages.txt"
@@ -72,6 +76,7 @@ export USERNAME="eraseproof"
 export USERFULLNAME="EraseProof Live"
 export HOST="eraseproof"
 export FLAVOUR="EraseProof"
+export BUILD_SYSTEM="Ubuntu"
 EOF
 mkdir -p "$root/etc/systemd/system/getty@tty1.service.d" "$root/etc/skel/Desktop" "$root/opt"
 cat > "$root/etc/systemd/system/getty@tty1.service.d/autologin.conf" <<'EOF'
@@ -79,7 +84,7 @@ cat > "$root/etc/systemd/system/getty@tty1.service.d/autologin.conf" <<'EOF'
 ExecStart=
 ExecStart=-/sbin/agetty --autologin eraseproof --noclear %I $TERM
 EOF
-cat >> "$root/etc/skel/.profile" <<'EOF'
+cat > "$root/etc/skel/.profile" <<'EOF'
 if [ -z "${DISPLAY:-}" ] && [ "$(tty)" = /dev/tty1 ]; then
   exec startx -- -nolisten tcp
 fi
@@ -91,8 +96,13 @@ openbox-session &
 exec dbus-run-session -- /opt/eraseproof/EraseProof
 EOF
 chmod 755 "$root/etc/skel/.xinitrc"
+install -m 755 "$scripts/live-boot-check.sh" "$root/usr/local/bin/eraseproof-boot-check"
+install -m 644 "$scripts/eraseproof-boot-check.service" "$root/etc/systemd/system/eraseproof-boot-check.service"
+mkdir -p "$root/etc/systemd/system/multi-user.target.wants"
+ln -sf ../eraseproof-boot-check.service "$root/etc/systemd/system/multi-user.target.wants/eraseproof-boot-check.service"
 mkdir -p "$root/opt/eraseproof"
 cp -a -- "$bundle/." "$root/opt/eraseproof/"
+python3 "$scripts/release_permissions.py" "$root/opt/eraseproof" --root-owner
 mkdir -p "$iso/.disk"
 "$bundle/EraseProof" --cli --version > "$iso/.disk/eraseproof-version"
 printf '%s\n' 'EraseProof Ubuntu 24.04 Live - amd64' > "$iso/.disk/info"
@@ -115,28 +125,18 @@ EOF
 chmod 755 "$root/etc/skel/Desktop/"*.desktop
 chroot "$root" update-initramfs -u -k all
 chroot "$root" apt-get clean
+printf '%s\n' '# Configure a resolver through the live network session if needed.' > "$root/etc/resolv.conf"
 truncate -s 0 "$root/etc/machine-id"
 chroot "$root" dpkg-query -W --showformat='${Package} ${Version}\n' > "$iso/casper/filesystem.manifest"
 cp -- "$(find "$root/boot" -maxdepth 1 -name 'vmlinuz-*' | sort -V | tail -1)" "$iso/casper/vmlinuz"
 cp -- "$(find "$root/boot" -maxdepth 1 -name 'initrd.img-*' | sort -V | tail -1)" "$iso/casper/initrd"
 cleanup_mounts
+for target in "$root/dev/pts" "$root/sys" "$root/proc"; do
+  if mountpoint -q "$target"; then
+    echo "A build mount remains active; filesystem snapshot refused: $target" >&2
+    exit 1
+  fi
+done
 du -sx --block-size=1 "$root" | cut -f1 > "$iso/casper/filesystem.size"
 mksquashfs "$root" "$iso/casper/filesystem.squashfs" -comp xz -noappend -processors 4 -no-progress
-cat > "$iso/boot/grub/grub.cfg" <<'EOF'
-set timeout=5
-set default=0
-menuentry "EraseProof - Ubuntu 24.04 Live" {
-  linux /casper/vmlinuz boot=casper username=eraseproof hostname=eraseproof noprompt noeject console=tty0 console=ttyS0,115200n8 ---
-  initrd /casper/initrd
-}
-menuentry "EraseProof - safe graphics" {
-  linux /casper/vmlinuz boot=casper username=eraseproof hostname=eraseproof noprompt noeject nomodeset ---
-  initrd /casper/initrd
-}
-EOF
-grub-script-check "$iso/boot/grub/grub.cfg"
-grub-mkrescue -o "$output" "$iso" -volid ERASEPROOF_LIVE
-sha256sum "$output" > "$output.sha256"
-printf '%s\n' "ISO built: $output" "SHA-256: $output.sha256" \
-  "Build workspace retained for inspection: $work" \
-  "No physical disks were written. Secure Boot support is not included. Test the ISO before deployment."
+bash "$scripts/assemble-live-iso.sh" "$work" "$output"

@@ -14,6 +14,7 @@ import tempfile
 import urllib.request
 import shlex
 import urllib.parse
+import time
 
 
 def bootstrap(root):
@@ -104,30 +105,62 @@ def apt(root):
         algorithm, expected = checksum.split(":", 1)
         algorithm = {"MD5Sum": "md5", "SHA256": "sha256", "SHA512": "sha512"}[algorithm]
         packages.append((url, name, int(size), algorithm, expected))
-    print(f"Prefetching {len(packages)} APT packages ({sum(p[2] for p in packages)/1024**2:.1f} MiB), eight connections; APT will independently revalidate them.", flush=True)
-    def download(package):
-        url, name, size, algorithm, expected = package
-        destination = cache/name
-        if destination.is_file() and destination.stat().st_size == size and hashlib.new(algorithm, destination.read_bytes()).hexdigest() == expected:
-            return
-        fd, temporary = tempfile.mkstemp(prefix=".eraseproof-fetch-", dir=cache)
-        try:
-            digest, length = hashlib.new(algorithm), 0
-            with os.fdopen(fd, "wb") as output, urllib.request.urlopen(url, timeout=120) as response:
-                while data := response.read(256*1024):
-                    output.write(data)
-                    length += len(data)
-                    digest.update(data)
-            if length != size or digest.hexdigest() != expected:
-                raise RuntimeError("APT package checksum/size mismatch: "+name)
-            os.replace(temporary, destination)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
+    print(f"Prefetching {len(packages)} APT packages ({sum(p[2] for p in packages)/1024**2:.1f} MiB); APT independently revalidates them.", flush=True)
+    jobs = []
+    for url, name, size, algorithm, expected in packages:
+        if size > 256*1024*1024:
+            raise RuntimeError("A package exceeds the per-package build download limit")
+        pieces = [(start, min(start+1024*1024, size)-1) for start in range(0, size, 1024*1024)]
+        item = {"name": name, "data": bytearray(size), "remaining": len(pieces), "algorithm": algorithm, "hash": expected}
+        jobs.extend((item, url, start, end, size) for start, end in pieces)
+    def download(job):
+        item, url, start, end, size = job
+        error = None
+        for attempt in range(3):
+            try:
+                request = urllib.request.Request(url, headers={"Range": f"bytes={start}-{end}"})
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    if not (response.status == 206 and response.headers.get("Content-Range", "").startswith(f"bytes {start}-{end}/") or response.status == 200 and start == 0 and end == size-1):
+                        raise RuntimeError("Mirror did not honor package byte range")
+                    data = response.read(end-start+2)
+                if len(data) != end-start+1:
+                    raise RuntimeError("Short/oversized package byte range")
+                return item, start, data
+            except Exception as exception:
+                error = exception
+                time.sleep(.25*(attempt+1))
+        raise RuntimeError(f"Download failed after retries: {item['name']}: {error}")
+    completed, received, last_report, failures = 0, 0, 0, []
     with ThreadPoolExecutor(max_workers=8) as pool:
-        for index, future in enumerate(as_completed([pool.submit(download, package) for package in packages]), 1):
-            future.result()
-            if index % 25 == 0 or index == len(packages):
-                print(f"Verified {index}/{len(packages)} APT downloads", flush=True)
+        for future in as_completed([pool.submit(download, job) for job in jobs]):
+            try:
+                item, start, data = future.result()
+                received += len(data)
+                if received-last_report >= 16*1024*1024:
+                    print(f"Downloaded {received/1024**2:.1f} MiB in bounded ranges; {completed} complete package hashes verified", flush=True)
+                    last_report = received
+                item["data"][start:start+len(data)] = data
+                item["remaining"] -= 1
+                if item["remaining"]:
+                    continue
+                if hashlib.new(item["algorithm"], item["data"]).hexdigest() != item["hash"]:
+                    raise RuntimeError("Package hash mismatch: "+item["name"])
+                fd, temporary = tempfile.mkstemp(prefix=".eraseproof-fetch-", dir=cache)
+                try:
+                    with os.fdopen(fd, "wb") as output:
+                        output.write(item["data"])
+                    os.replace(temporary, cache/item["name"])
+                finally:
+                    Path(temporary).unlink(missing_ok=True)
+                item["data"] = None
+                completed += 1
+                if completed % 10 == 0 or completed == len(packages):
+                    print(f"Verified {completed}/{len(packages)} packages", flush=True)
+            except Exception as error:
+                failures.append(str(error))
+                print(str(error), file=sys.stderr, flush=True)
+    if failures:
+        raise RuntimeError("Build package prefetch incomplete; verified cache is preserved for --resume. "+failures[0])
 
 
 if __name__ == "__main__":

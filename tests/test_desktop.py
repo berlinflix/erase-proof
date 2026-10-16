@@ -50,3 +50,19 @@ def test_native_window_pages_and_background_recovery(tmp_path):
     assert all(str(tmp_path/"chosen-output") in candidate["output"] for candidate in window.recovered)
     assert window.cancel_button.isEnabled() is False
     window.close()
+
+
+def test_native_window_supports_a_small_vm_display(tmp_path):
+    application = QApplication.instance() or QApplication([])
+    window = MainWindow(tmp_path/"small-workspace")
+    window.resize(1000, 720)
+    window.show()
+    application.processEvents()
+    assert window.width() <= 1000 and window.height() <= 720
+    window.switch(1)
+    application.processEvents()
+    assert window.page_scroll.verticalScrollBar().maximum() > 0
+    window.page_scroll.verticalScrollBar().setValue(window.page_scroll.verticalScrollBar().maximum())
+    application.processEvents()
+    assert window.page_scroll.verticalScrollBar().value() > 0
+    window.close()

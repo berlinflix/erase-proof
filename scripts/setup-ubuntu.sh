@@ -7,8 +7,9 @@ if [[ "$(uname -s)" != Linux ]]; then
 fi
 echo "Installing the Ubuntu runtime and real forensic/demo tools."
 sudo apt-get update
-sudo apt-get install -y python3 python3-venv python3-pip dosfstools mtools sleuthkit testdisk nvme-cli hdparm cryptsetup-bin \
-  libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-xinerama0
+sudo apt-get install -y python3 python3-venv python3-pip xdg-utils dosfstools mtools sleuthkit testdisk nvme-cli hdparm cryptsetup-bin \
+  libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-xinerama0 \
+  libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libdbus-1-3 fonts-dejavu-core
 python3 -m venv "$root/.venv"
 "$root/.venv/bin/python" -m pip install --upgrade pip
 "$root/.venv/bin/python" -m pip install "$root[desktop,test]"

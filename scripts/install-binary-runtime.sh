@@ -2,7 +2,7 @@
 set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 sudo apt-get update
-sudo apt-get install -y dosfstools mtools sleuthkit testdisk nvme-cli hdparm cryptsetup-bin libegl1 libopengl0 libxcb-cursor0 \
+sudo apt-get install -y python3 xdg-utils dosfstools mtools sleuthkit testdisk nvme-cli hdparm cryptsetup-bin libegl1 libopengl0 libxcb-cursor0 \
   libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
   libxcb-xinerama0 libdbus-1-3 fonts-dejavu-core
 mkdir -p "$HOME/.local/share/applications"
