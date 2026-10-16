@@ -66,3 +66,24 @@ def test_native_window_supports_a_small_vm_display(tmp_path):
     application.processEvents()
     assert window.page_scroll.verticalScrollBar().value() > 0
     window.close()
+
+
+def test_native_ext4_targeted_workflow(tmp_path, monkeypatch):
+    from test_ext4 import fixture
+    from PySide6.QtWidgets import QInputDialog
+    image, _, _ = fixture(tmp_path)
+    application = QApplication.instance() or QApplication([])
+    window = MainWindow(tmp_path/"ext4-workspace")
+    window.switch(5)
+    window.offline_filesystem.setCurrentText("ext4")
+    window.fat_image.setText(str(image))
+    window.fat_internal.setText("/private-case")
+    window.list_fat()
+    wait_for_job(application, window)
+    assert "/private-case/confidential.bin" in window.targeted_details.toPlainText()
+    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: ("volume.img:/private-case", True))
+    window.erase_fat_target()
+    wait_for_job(application, window)
+    assert window.store.records()[0]["payload"]["verification"]["rrs"] == 0
+    assert "Unrelated allocated files preserved" in window.status_label.text()
+    window.close()

@@ -15,6 +15,7 @@ Qt desktop / CLI
       |     +-- PhotoRec attack reports and MBR/GPT partition offsets
       |
       +-- overwrite engine
+      |     +-- C descriptor-only O_DIRECT writes, reported buffered tails
       |     +-- pinned file descriptor, exclusive file lock
       |     +-- O_EXCL block-device open, explicit path + serial allowlist
       |     +-- actual bounded writes, fsync, cache-drop advice
@@ -24,6 +25,8 @@ Qt desktop / CLI
       +-- targeted operations
       |     +-- pinned logical file/folder overwrite and unlink
       |     +-- offline FAT32 chains, metadata and known free-space copies
+      |     +-- C/libext2fs offline ext4 free space, unused inodes, directory slack and journal history
+      |     +-- allocated unrelated file hashes and read-only filesystem consistency gates
       |
       +-- media operations
       |     +-- read-only NVMe/ATA/HPA/DCO discovery
@@ -58,7 +61,7 @@ The carver scans in 4 MiB chunks, with a 256 MiB candidate limit. Recovered imag
 
 The software milestones and exact validation state are tracked in [MILESTONES.md](MILESTONES.md). Device command scope is in [MEDIA.md](MEDIA.md); signer trust, PDF verification and truncation detection are in [EVIDENCE.md](EVIDENCE.md).
 
-Research work still requires implementation/evaluation for ext4/NTFS/exFAT targeted history cleanup, arbitrary fragmentation, ATA destructive commands, HPA/DCO changes, a smaller privileged broker/C component, unknown snapshots/copies, public operator trust infrastructure and physical-media sanitization assurance. No mounted filesystem is scrubbed through guessed raw extents or blind journal edits.
+Remaining implementation/evaluation covers NTFS/exFAT targeted history cleanup, broader fragmentation, ATA destructive commands, HPA/DCO changes, privileged orchestration, unknown snapshots/copies, public operator trust infrastructure and physical-media sanitization assurance. The C I/O and offline ext4 components are unprivileged and use policy-checked descriptors. No mounted filesystem is scrubbed through guessed raw extents or blind journal edits.
 
 The default image experiment and GUI flow are tested in WSL Ubuntu. VirtualBox guest device I/O and physical media need separate acceptance tests; a VM result must not be presented as host SSD sanitization.
 

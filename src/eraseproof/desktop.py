@@ -42,7 +42,7 @@ STYLE = """
 QWidget { font-family: 'Ubuntu', 'DejaVu Sans', sans-serif; font-size: 12px; color: #25362e; }
 QMainWindow, QWidget#surface { background: #f3f5f0; }
 QFrame#sidebar { background: #19382d; border: none; }
-QLabel#brand { color: #f0f6e8; font-size: 23px; font-weight: 700; }
+QLabel#brand { color: #f0f6e8; font-size: 22px; font-weight: 700; }
 QLabel#sideNote { color: #a0b89e; font-size: 11px; }
 QLabel#sideCaption { color: #8eac8b; font-size: 10px; font-weight: 600; }
 QPushButton#nav { background: transparent; border: none; border-radius: 5px; color: #afc4a6; text-align: left; padding: 13px 15px; }
@@ -53,7 +53,7 @@ QLabel#title { font-size: 29px; font-weight: 600; color: #243b2b; }
 QLabel#subtitle { color: #7b8d71; font-size: 12px; }
 QFrame#panel { background: #ffffff; border: 1px solid #dfe6d7; border-radius: 7px; }
 QLabel#panelTitle { font-size: 14px; font-weight: 600; color: #344e32; }
-QLabel#body { color: #7c8e70; line-height: 150%; }
+QLabel#body { color: #5d7353; line-height: 150%; }
 QLabel#metric { font-size: 28px; font-weight: 600; color: #4e783c; }
 QLabel#tag { background: #eaf1e0; border: 1px solid #d7e3c8; color: #688553; padding: 5px 8px; border-radius: 4px; font-size: 10px; }
 QPushButton { background: #fff; border: 1px solid #d9e2ce; border-radius: 4px; padding: 9px 13px; color: #567347; }
@@ -86,7 +86,7 @@ def label(text, name="body", wrap=False):
 
 
 def button(text, action=None, primary=False):
-    widget = QPushButton(text)
+    widget = QPushButton(text.replace("&", "&&"))
     if primary:
         widget.setObjectName("primary")
     if action:
@@ -184,7 +184,7 @@ class MainWindow(QMainWindow):
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(20, 30, 20, 23)
         side.setSpacing(7)
-        side.addWidget(label("E_  EraseProof", "brand"))
+        side.addWidget(label("EraseProof", "brand"))
         side.addSpacing(7)
         side.addWidget(label("NATIVE LINUX WORKBENCH", "sideCaption"))
         side.addSpacing(34)
@@ -428,7 +428,10 @@ class MainWindow(QMainWindow):
         row.addWidget(self.registered("Overwrite & unlink…", self.erase_file_target, True))
         box.addLayout(row)
         layout.addWidget(logical)
-        offline, box = panel("Offline FAT32 file / folder", "Preserves unrelated live files. Removes selected allocation chains and matching deleted-name records, then searches proven free clusters for known sector copies. Use an unattached FAT32 volume image.")
+        offline, box = panel("Offline filesystem image", "Preserves unrelated allocated files. FAT32 removes target chains and known free-sector copies. Ext4 also clears all unallocated history, unused inodes, directory slack and inactive journal blocks. Use an unattached volume image.")
+        self.offline_filesystem = QComboBox()
+        self.offline_filesystem.addItems(["FAT32", "ext4"])
+        box.addWidget(self.offline_filesystem)
         self.fat_image = QLineEdit()
         self.source_row(box, self.fat_image)
         row = QHBoxLayout()
@@ -520,6 +523,11 @@ class MainWindow(QMainWindow):
             self.on_error(str(error))
 
     def list_fat(self):
+        if self.offline_filesystem.currentText() == "ext4":
+            from .ext4 import list_paths
+            path = self.fat_image.text()
+            return self.execute(lambda progress, cancel: list_paths(path),
+                                lambda result: self.targeted_details.setPlainText(json.dumps(result, indent=2)))
         try:
             path = self.fat_image.text()
             with open(path, "rb") as stream:
@@ -530,16 +538,22 @@ class MainWindow(QMainWindow):
 
     def erase_fat_target(self):
         path, internal = self.fat_image.text(), self.fat_internal.text()
+        ext4 = self.offline_filesystem.currentText() == "ext4"
         expected = Path(path).name+":"+"/"+internal.strip("/")
-        text, accepted = QInputDialog.getText(self, "Confirm FAT32 targeted erasure", "This changes the actual image allocation chains and metadata.\n\nType exactly: "+expected)
+        warning = "This also clears ALL unallocated history, unused inodes, directory slack and inactive journal blocks on this ext4 image." if ext4 else "This changes the actual FAT32 image allocation chains and metadata."
+        text, accepted = QInputDialog.getText(self, "Confirm offline targeted erasure", warning+"\n\nType exactly: "+expected)
         if not accepted:
             return
         if text != expected:
             return self.on_error("Confirmation did not match. Nothing was erased.")
         def done(record):
             self.targeted_details.setPlainText(json.dumps(record, indent=2))
-            self.status_label.setText("FAT32 selected target and known free-space copies verified. Unrelated live files preserved.")
-        self.execute(lambda progress, cancel: erase_path(path, internal, text, self.store.root, progress, cancel), done)
+            self.status_label.setText("Selected target residue checks passed. Unrelated allocated files preserved.")
+        if ext4:
+            from .ext4 import erase_path as operation
+        else:
+            operation = erase_path
+        self.execute(lambda progress, cancel: operation(path, internal, text, self.store.root, progress, cancel), done)
 
     def switch(self, index):
         titles = [("The recovery experiment", "A reproducible filesystem experiment for your Ubuntu VM."),
@@ -547,7 +561,7 @@ class MainWindow(QMainWindow):
                   ("Erase. Attack. Verify.", "Measured logical erasure, with explicit target identity and evidence."),
                   ("Keep the proof.", "Signed results and a transactional, hash-chained audit history."),
                   ("Know your target.", "Inspect actual Linux devices before preparing an operation.")]
-        titles.append(("Choose what to remove.", "Logical file erasure and offline FAT32 allocation-aware cleanup."))
+        titles.append(("Choose what to remove.", "Logical file erasure and offline filesystem-aware cleanup."))
         titles.append(("Choose a method with evidence.", "Native capability inspection, firmware status and LUKS2 keyslot removal."))
         self.title.setText(titles[index][0])
         self.subtitle.setText(titles[index][1])

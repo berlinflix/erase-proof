@@ -29,6 +29,9 @@ with zipfile.ZipFile(artifacts/f"EraseProof-source-{version}.zip") as source:
     assert all(not (info.external_attr >> 16) & 0o022 for info in source.infolist())
     assert any(n.endswith("src/eraseproof/desktop.py") for n in names)
     assert any(n.endswith("resources/fonts/LICENSE.txt") for n in names)
+    assert any(n.endswith("native/io.c") for n in names)
+    assert any(n.endswith("native/ext4.c") for n in names)
+    assert not any(n.endswith(".so") or n.endswith("resources/native/eraseproof-ext4") for n in names)
     assert not any(".venv" in n or "operator-ed25519.key" in n or "prototype-web" in n or n.endswith(".sqlite3") for n in names)
 with tarfile.open(artifacts/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz") as archive:
     for item in archive:
@@ -40,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-extracted-") as temporary:
     binary = Path(temporary)/"EraseProof"/"EraseProof"
     doctor = json.loads(subprocess.run([str(binary), "--cli", "doctor"], capture_output=True, text=True, check=True).stdout)
     assert doctor["version"] == version
+    assert doctor["native_direct_io"] and doctor["offline_ext4_adapter"]
     assert (binary.parent/"THIRD-PARTY-LICENSES"/"Qt-and-PySide"/"LGPL-3.0.txt").is_file()
     gui = subprocess.Popen([str(binary)], env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "HOME": temporary}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     time.sleep(3)

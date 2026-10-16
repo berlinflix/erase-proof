@@ -15,6 +15,7 @@ import uuid
 from .carve import CHUNK, checkpoint
 from .evidence import EvidenceStore, now
 from .models import EraseProofError
+from . import nativeio
 
 PROTECTED = tuple(Path(p) for p in ("/", "/boot", "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64", "/proc", "/sys", "/dev", "/run"))
 
@@ -64,7 +65,17 @@ def plan_files(path):
         entry = candidate.stat()
         if entry.st_nlink != 1:
             raise EraseProofError(f"Hard-linked file refused: {candidate}")
-        entries.append({"path": str(candidate), **_identity(entry)})
+        item = {"path": str(candidate), **_identity(entry)}
+        if nativeio.library() is not None:
+            try:
+                fd = os.open(candidate, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+                try:
+                    item["extent_inventory"] = nativeio.extents(fd)
+                finally:
+                    os.close(fd)
+            except (EraseProofError, OSError) as error:
+                item["extent_inventory_error"] = str(error)
+        entries.append(item)
     if not entries:
         raise EraseProofError("No ordinary files were selected.")
     return {"root": str(root), "confirmation": root.name, "files": entries,
@@ -107,19 +118,37 @@ def erase_files(path, confirmation, evidence_dir, progress=None, cancel=None, un
                     before.update(block)
                 stream.seek(0)
                 written, zeros = 0, bytes(CHUNK)
+                native = nativeio.library() is not None
+                direct_bytes, tail_bytes = 0, 0
                 while written < opened.st_size:
                     checkpoint(cancel)
-                    data = memoryview(zeros)[:min(CHUNK, opened.st_size-written)]
-                    while data:
-                        count = stream.write(data)
-                        if not count:
-                            raise EraseProofError("File write failed; current target may be partially overwritten.")
-                        written += count
-                        total_written += count
-                        data = data[count:]
+                    length = min(CHUNK, opened.st_size-written)
+                    if native:
+                        aligned = length-length % nativeio.ALIGN
+                        if aligned:
+                            nativeio.zero(stream.fileno(), written, aligned)
+                            written += aligned
+                            direct_bytes += aligned
+                            total_written += aligned
+                        if length != aligned:
+                            nativeio.zero(stream.fileno(), written, length-aligned, direct=False)
+                            written += length-aligned
+                            tail_bytes += length-aligned
+                            total_written += length-aligned
+                    else:
+                        data = memoryview(zeros)[:length]
+                        while data:
+                            count = stream.write(data)
+                            if not count:
+                                raise EraseProofError("File write failed; current target may be partially overwritten.")
+                            written += count
+                            total_written += count
+                            data = data[count:]
                     if progress:
                         progress("Erase files", total_written/max(prepared["bytes"], 1), f"Overwriting {Path(item['path']).name}")
                 os.fsync(stream.fileno())
+                if hasattr(os, "posix_fadvise"):
+                    os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
                 if os.fstat(stream.fileno()).st_size != opened.st_size:
                     raise EraseProofError("File size changed during overwrite.")
                 stream.seek(0)
@@ -146,7 +175,9 @@ def erase_files(path, confirmation, evidence_dir, progress=None, cancel=None, un
                     finally:
                         os.close(parent_fd)
                 measurements.append({"path": item["path"], "bytes_checked": checked, "before_sha256": before.hexdigest(),
-                                     "after_sha256": after.hexdigest(), "unlinked": unlink, "nonzero_bytes": 0})
+                                     "after_sha256": after.hexdigest(), "unlinked": unlink, "nonzero_bytes": 0,
+                                     "io": {"implementation": "C/O_DIRECT" if native else "Python/buffered-fsync",
+                                            "direct_bytes": direct_bytes, "buffered_tail_bytes": tail_bytes}})
         if unlink:
             for folder in prepared["directories"]:
                 os.rmdir(folder)  # Refuses any new/unplanned children rather than recursively deleting them.

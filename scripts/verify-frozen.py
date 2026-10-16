@@ -21,6 +21,7 @@ def run(*args):
 with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     root = Path(temporary)
     doctor = run("doctor")
+    assert doctor["native_direct_io"] and doctor["offline_ext4_adapter"]
     manifest = run("demo", "create", root/"experiment", "--deleted")
     recovery = run("recover", manifest["image"], "--output", root/"recovery")
     expected = {item["sha256"] for item in manifest["files"]}
@@ -28,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     assert expected == recovered
     result = run("erase", manifest["image"], "--confirm", "experiment.img", "--references", root/"experiment"/"manifest.json", "--case", root/"evidence")
     assert result["record"]["payload"]["verification"]["rrs"] == 0
+    assert result["record"]["payload"]["verification"]["io"]["direct_bytes"] == 64*1024*1024
     assert run("record", result["certificate"])["signature_valid"]
     fingerprint = result["record"]["signer_fingerprint"]
     assert run("record", result["certificate"], "--trusted-fingerprint", fingerprint)["trusted_signer"]
@@ -46,6 +48,19 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     logical.write_text("Native executable targeted erasure fixture")
     assert run("erase-files", logical, "--confirm", logical.name, "--case", root/"evidence")["payload"]["verification"]["passed"]
     assert not logical.exists()
+    ext4_image = root/"ext4.img"
+    with ext4_image.open("xb") as stream:
+        stream.truncate(32*1024*1024)
+    subprocess.run(["mkfs.ext4", "-q", "-F", str(ext4_image)], check=True)
+    secret, keep = root/"secret.bin", root/"keep.bin"
+    secret.write_bytes(b"FROZEN-EXT4-PRIVATE-SAMPLE"*1000)
+    keep.write_bytes(os.urandom(17000))
+    for source, internal in ((secret, "/private.bin"), (keep, "/keep.bin")):
+        subprocess.run(["debugfs", "-w", "-R", f"write {source} {internal}", str(ext4_image)], check=True, capture_output=True)
+    prepared = run("ext4-plan", ext4_image, "/private.bin")
+    ext4 = run("ext4-erase", ext4_image, "/private.bin", "--confirm", prepared["confirmation"], "--case", root/"evidence")
+    assert ext4["payload"]["verification"]["rrs"] == 0
+    assert ext4["payload"]["verification"]["preserved_files_hash_checked"] == 1
     environment = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "HOME": str(root/"home")}
     (root/"home").mkdir()
     gui = subprocess.Popen([binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
@@ -55,4 +70,4 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     gui.terminate()
     gui.wait(timeout=10)
     assert all(c["confidence"] >= 98 for c in recovery["candidates"] if c["method"] != "sleuthkit-metadata")
-    print(json.dumps({"binary": binary, "version": doctor["version"], "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_and_expected_signer_valid": True, "pdf_attachment_valid": True, "anchored_audit_intact": True, "independent_photorec_after_files": 0, "targeted_file_erasure": "passed", "native_qt_process_startup": "passed"}, indent=2))
+    print(json.dumps({"binary": binary, "version": doctor["version"], "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_and_expected_signer_valid": True, "pdf_attachment_valid": True, "anchored_audit_intact": True, "independent_photorec_after_files": 0, "targeted_file_erasure": "passed", "native_direct_io_bytes": 64*1024*1024, "offline_ext4_erasure_and_preservation": "passed", "native_qt_process_startup": "passed"}, indent=2))

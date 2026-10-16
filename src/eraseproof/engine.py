@@ -11,6 +11,7 @@ from . import carve
 from .evidence import EvidenceStore, now
 from .models import EraseProofError
 from .targets import describe, open_target, virtual_disk_policy
+from . import nativeio
 
 
 def validate_references(references):
@@ -59,6 +60,7 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
     if any(not p or len(p) > 65536 for p in patterns):
         raise EraseProofError("Metadata patterns must contain 1–65536 bytes.")
     matched_hashes, matched_patterns = set(), set()
+    block_findings, pattern_findings = [], []
     nonzero, checked, carry = 0, 0, b""
     digest = hashlib.sha256()
     try:
@@ -76,10 +78,15 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
                     if any(block):
                         hash_value = hashlib.sha256(block).hexdigest()
                         if hash_value in block_hashes:
+                            if hash_value not in matched_hashes and len(block_findings) < 1000:
+                                block_findings.append({"sha256": hash_value, "offset": checked+offset})
                             matched_hashes.add(hash_value)
             window = carry+data
             for i, pattern in enumerate(patterns):
-                if pattern in window:
+                at = window.find(pattern)
+                if at >= 0:
+                    if i not in matched_patterns and len(pattern_findings) < 1000:
+                        pattern_findings.append({"pattern_index": i, "offset": checked-len(carry)+at, "length": len(pattern)})
                     matched_patterns.add(i)
             overlap = max((len(p)-1 for p in patterns), default=0)
             carry = window[-overlap:] if overlap else b""
@@ -93,6 +100,8 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
                 "bytes_checked": checked, "nonzero_bytes": nonzero, "sha256": digest.hexdigest(),
                 "carved_candidates": [c.to_dict() for c in files], "matched_reference_blocks": len(matched_hashes),
                 "metadata_residues": len(matched_patterns), "reference_count": denominator,
+                "reference_block_findings": block_findings, "metadata_findings": pattern_findings,
+                "finding_limit": 1000,
                 "rrs": (len(matched_hashes)+len(matched_patterns))/denominator if denominator else None,
                 "scope": "Full logical-range zero read-back plus contiguous carving and provided aligned references; not physical storage, snapshots, hidden areas or firmware verification."}
     finally:
@@ -144,22 +153,39 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
         store.append("erasure.started", {"job": job, "target": target, "before_sha256": before, "method": prepared["method"]})
         stream.seek(0)
         written, zeros = 0, bytes(carve.CHUNK)
+        native = nativeio.library() is not None
+        direct_bytes, tail_bytes = 0, 0
         try:
             while written < target["size"]:
                 carve.checkpoint(cancel)
-                part = memoryview(zeros)[:min(len(zeros), target["size"]-written)]
-                while part:
-                    count = stream.write(part)
-                    if not count:
-                        raise EraseProofError("Short or failed write; target may be partially overwritten.")
-                    written += count
-                    part = part[count:]
+                length = min(len(zeros), target["size"]-written)
+                if native:
+                    aligned = length-length % nativeio.ALIGN
+                    if aligned:
+                        nativeio.zero(stream.fileno(), written, aligned)
+                        written += aligned
+                        direct_bytes += aligned
+                    if length != aligned:
+                        nativeio.zero(stream.fileno(), written, length-aligned, direct=False)
+                        written += length-aligned
+                        tail_bytes += length-aligned
+                else:
+                    part = memoryview(zeros)[:length]
+                    while part:
+                        count = stream.write(part)
+                        if not count:
+                            raise EraseProofError("Short or failed write; target may be partially overwritten.")
+                        written += count
+                        part = part[count:]
                 if progress:
                     progress("Erase", written/target["size"], f"Overwrote {written:,} / {target['size']:,} bytes")
             os.fsync(stream.fileno())
             if hasattr(os, "posix_fadvise"):
                 os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
             result = verify(path, references, progress, cancel, stream, target["size"])
+            result["io"] = {"implementation": "C/O_DIRECT" if native else "Python/buffered-fsync",
+                            "direct_bytes": direct_bytes, "buffered_tail_bytes": tail_bytes,
+                            "fsync_completed": True}
             if not result["passed"]:
                 raise EraseProofError("Residue detected after overwrite. No certificate issued.")
             if stat.S_ISREG(opened.st_mode) and os.fstat(stream.fileno()).st_size != target["size"]:

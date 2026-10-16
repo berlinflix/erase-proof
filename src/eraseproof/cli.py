@@ -131,6 +131,14 @@ def parser():
     fw.add_argument("internal_path")
     fw.add_argument("--confirm", required=True)
     fw.add_argument("--case", required=True)
+    ep = sub.add_parser("ext4-plan", help="Inspect offline ext4 targeted erasure and global history cleanup")
+    ep.add_argument("image")
+    ep.add_argument("internal_path")
+    ee = sub.add_parser("ext4-erase", help="Erase a selected ext4 image path and all unallocated/journal/slack history")
+    ee.add_argument("image")
+    ee.add_argument("internal_path")
+    ee.add_argument("--confirm", required=True)
+    ee.add_argument("--case", required=True)
     worker = sub.add_parser("_validate", help=argparse.SUPPRESS)
     worker.add_argument("path")
     worker.add_argument("family")
@@ -172,8 +180,11 @@ def main(argv=None):
             from .desktop import main as desktop
             return desktop()
         if args.command == "doctor":
+            from .nativeio import library
             output = {"version": __version__, "platform": platform.platform(), "python": sys.version.split()[0],
                       "tools": {name: shutil.which(name) for name in ("lsblk", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm")},
+                      "native_direct_io": library() is not None,
+                      "offline_ext4_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4").is_file(),
                       "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":
             output = devices()
@@ -250,6 +261,12 @@ def main(argv=None):
         elif args.command == "media-probe":
             from .media import probe
             output = probe(args.target)
+        elif args.command == "ext4-plan":
+            from .ext4 import plan_path
+            output = plan_path(args.image, args.internal_path)
+        elif args.command == "ext4-erase":
+            from .ext4 import erase_path as ext4_erase
+            output = ext4_erase(args.image, args.internal_path, args.confirm, args.case, progress)
         elif args.command == "nvme-plan":
             from .media import nvme_probe, nvme_plan
             output = nvme_plan(nvme_probe(args.controller), args.method, args.allow_controller, args.confirm)

@@ -51,10 +51,11 @@ CLI results are JSON; progress goes to stderr. Verification uses exit code 2 for
 
 ## Targeted file and folder operations
 
-The native **Targeted erasure** page and CLI support two distinct operations:
+The native **Targeted erasure** page and CLI support these operations:
 
 - `file-plan` / `erase-files`: pin each ordinary file's identity, overwrite and read back its current bytes, then unlink. Symlinks, hard links, protected system paths, cross-device trees and evidence inside the target are refused. The signed record explicitly excludes journals, snapshots and previous copies.
 - `fat32-list` / `fat32-erase`: edit an offline, unattached FAT32 volume image. The engine validates both FAT copies and allocation chains, erases selected file/folder clusters and long/short directory records, searches free clusters for known sector copies, and preserves unrelated live files. Tests run `fsck.fat` and byte-match preserved files after the operation.
+- `ext4-plan` / `ext4-erase`: use the C/libext2fs adapter to remove an internal image file/folder, clear all unallocated blocks and unused inodes, scrub directory slack and inactive journal payload, and hash-check unrelated allocated files. Both pre/post `e2fsck -fn` checks must pass. This also removes other deleted-file history on that volume. See [ext4 scope and supported features](docs/OFFLINE-EXT4.md).
 
 ```bash
 eraseproof file-plan /path/to/selected-folder
@@ -64,7 +65,11 @@ eraseproof fat32-erase ~/EraseProof/demo-01/experiment.img /REPORT.PDF \
   --confirm experiment.img:/REPORT.PDF --case ~/EraseProof/evidence-targeted
 ```
 
-FAT32 cleanup is bounded to known image allocation and reference evidence. It does not imply ext4/NTFS journal cleanup or physical flash sanitization.
+Offline cleanup is bounded to the selected filesystem image and reference evidence. It does not imply removal of host snapshots or physical flash remnants.
+
+The [native C I/O component](docs/NATIVE-IO.md) provides aligned `O_DIRECT` writes
+for image and current-file erasure, explicit buffered tails, bounded FIEMAP
+inventory, and separately gated ioctl primitives. Actual I/O counts are recorded.
 
 ## Expanded forensic recovery
 
@@ -100,7 +105,7 @@ The **Media methods** page and CLI inspect native NVMe/ATA capabilities and soft
 
 This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
 
-Open research work includes ext4/NTFS/exFAT targeted journal/history cleanup, ATA destructive adapters, HPA/DCO changes, arbitrary fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
+Remaining work includes NTFS/exFAT targeted history cleanup, ATA destructive adapters, HPA/DCO changes, broader fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
 
 Metadata recovery uses the real Sleuth Kit. The carver streams large sources in chunks; candidates are bounded to 256 MiB. PNG/ZIP checksums, bounded image decoding and strict PDF parsing provide format-specific evidence. Container-only checks are labelled. Confidence is a heuristic; it is not a probability or proof of semantic correctness.
 
@@ -113,7 +118,8 @@ Cancellation of a real overwrite is **not reversible**: the target may be partia
 ## Development
 
 ```bash
-sudo apt-get install -y gcc ffmpeg p7zip-full
+sudo apt-get install -y gcc libext2fs-dev e2fsprogs ntfs-3g exfatprogs ffmpeg p7zip-full
+bash scripts/build-native.sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[desktop,test]'
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q

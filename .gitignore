@@ -26,3 +26,5 @@ __pycache__/
 *.raw
 *.dd
 *.iso
+*.so
+/src/eraseproof/resources/native/eraseproof-ext4

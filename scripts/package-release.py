@@ -5,6 +5,7 @@ import tarfile
 import zipfile
 import importlib.metadata
 import shutil
+import subprocess
 from release_permissions import file_mode
 
 root = Path(__file__).resolve().parent.parent
@@ -32,6 +33,28 @@ if python_license.is_file():
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(python_license, destination/"copyright")
 shutil.copytree(root/"docs"/"licenses", binary/"THIRD-PARTY-LICENSES"/"Qt-and-PySide", dirs_exist_ok=True)
+# PyInstaller discovers system ELF dependencies as well as wheel libraries.
+# Preserve Ubuntu copyright files and the full common license texts for them.
+system_packages = set()
+for bundled in (binary/"_internal").iterdir():
+    if not bundled.is_file() or ".so" not in bundled.name:
+        continue
+    for directory in (Path("/lib/x86_64-linux-gnu"), Path("/usr/lib/x86_64-linux-gnu"), Path("/lib64")):
+        original = directory/bundled.name
+        if not original.is_file():
+            continue
+        for candidate in {str(original), str(original.resolve())}:
+            found = subprocess.run(["dpkg-query", "-S", candidate], capture_output=True, text=True)
+            if found.returncode == 0:
+                for line in found.stdout.splitlines():
+                    system_packages.add(line.split(": ", 1)[0].split(":", 1)[0])
+for package in sorted(system_packages):
+    copyright_file = Path("/usr/share/doc")/package/"copyright"
+    if copyright_file.is_file():
+        destination = binary/"THIRD-PARTY-LICENSES"/"Ubuntu-libraries"/package
+        destination.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(copyright_file, destination/"copyright")
+shutil.copytree("/usr/share/common-licenses", binary/"THIRD-PARTY-LICENSES"/"Common-license-texts", dirs_exist_ok=True)
 versions = [f"{distribution.metadata['Name']}=={distribution.version}" for distribution in importlib.metadata.distributions()
             if distribution.metadata.get("Name") != "eraseproof"]
 (binary/"BUILD-PACKAGES.txt").write_text("\n".join(sorted(set(versions)))+"\n")
@@ -65,13 +88,14 @@ CLI:
 
 Scope: actual image writes and guest-visible logical overwrite only.
 The default demo needs no root and never targets the system disk.
-Includes targeted logical file/folder erasure, offline FAT32 path cleanup,
+Includes native C direct I/O, targeted logical file/folder erasure, offline
+FAT32 path cleanup, C/libext2fs ext4 allocation/inode/slack/journal cleanup,
 expanded validated carving, PhotoRec/TSK attack reports, partition discovery,
 signed JSON/PDF/QR reports, trusted signer checks and audit checkpoints.
 NVMe command submission is a separate guarded privileged CLI adapter, with
 audited receipts rather than physical-erasure certificates. LUKS2 image
 keyslot removal is supported. See source docs/MEDIA.md and docs/EVIDENCE.md.
-ATA destructive commands, ext4/NTFS journal cleanup, snapshots and physical
+ATA destructive commands, NTFS/exFAT targeted cleanup, snapshots and physical
 flash-remanence assurance are outside this release's verified scope.
 Secondary virtual-disk writes are gated by a path/serial policy and require
 separate VirtualBox acceptance testing. Begin with the image experiment.
@@ -98,8 +122,9 @@ with tarfile.open(archive, "w:gz") as file:
 
 source = output/f"EraseProof-source-{version}.zip"
 paths = [root/name for name in ("README.md", "pyproject.toml", ".gitattributes", ".gitignore")]
-for directory in ("src", "tests", "scripts", "docs"):
-    paths.extend(p for p in (root/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc")
+for directory in ("src", "tests", "scripts", "docs", "native"):
+    paths.extend(p for p in (root/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts
+                 and p.suffix not in (".pyc", ".so") and p.name not in ("eraseproof-ext4", "eraseproof-ntfs"))
 with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as file:
     for path in sorted(paths):
         info = zipfile.ZipInfo.from_file(path, arcname=str(Path(f"EraseProof-source-{version}")/path.relative_to(root)))

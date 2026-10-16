@@ -2,6 +2,7 @@
 set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+bash "$root/scripts/build-native.sh"
 python="${ERASEPROOF_BUILD_PYTHON:-$root/.venv/bin/python}"
 "$python" -m pip install pyinstaller
 "$python" -m PyInstaller --noconfirm --clean --name EraseProof --windowed \

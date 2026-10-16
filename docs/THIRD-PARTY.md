@@ -23,3 +23,14 @@ notices are available through the Qt source repositories:
 System tools installed by apt are supplied by Ubuntu as separate packages.
 The live image records all installed Ubuntu package versions in its filesystem
 manifest and retains their package copyright files.
+
+The EraseProof ext4 helper is built against Ubuntu's libext2fs and libcom_err,
+provided by e2fsprogs. PyInstaller also collects ELF dependencies as separate
+shared libraries. Ubuntu package copyright files for discovered system libraries
+are collected under `THIRD-PARTY-LICENSES/Ubuntu-libraries`, with full common
+license texts alongside them. The adapter invokes system tools with a clean
+library environment; runtime tools are installed through apt. The source archive
+includes the helper's complete C source and build command. Upstream implementation
+and licensing notices are available in
+[e2fsprogs](https://git.kernel.org/pub/scm/fs/ext2/e2fsprogs.git/) and Ubuntu's
+`/usr/share/doc/e2fsprogs/copyright`.
