@@ -16,6 +16,14 @@ from .runtime import system_environment
 from .targets import describe, open_target
 
 
+def backend(filesystem):
+    from . import fat, ext4, ntfs, exfat
+    try:
+        return {"fat32": fat, "ext4": ext4, "ntfs": ntfs, "exfat": exfat}[filesystem.lower()]
+    except KeyError:
+        raise EraseProofError("Unsupported offline filesystem.") from None
+
+
 def run(arguments, *, fd=None, timeout=600):
     try:
         result = subprocess.run(list(map(str, arguments)), stdin=subprocess.DEVNULL,
@@ -51,27 +59,32 @@ def inventory(image, fd, filesystem="ext4"):
     return result
 
 
+def fingerprint_data(entry, chunks):
+    sha, blocks, head, tail, pending, length = hashlib.sha256(), set(), b"", b"", b"", 0
+    for data in chunks:
+        sha.update(data)
+        length += len(data)
+        head, tail = (head+data)[:64], (tail+data)[-64:]
+        pending += data
+        full = len(pending)//512*512
+        for at in range(0, full, 512):
+            block = pending[at:at+512]
+            if any(block):
+                blocks.add(hashlib.sha256(block).hexdigest())
+        pending = pending[full:]
+    samples = {sample.hex() for sample in (head, tail) if any(sample)}
+    return {"path": entry["path"], "inode": entry["inode"], "sha256": sha.hexdigest(), "size": length}, blocks, samples
+
+
 def content(image, entry, fd):
     # Stream large files to a temporary file instead of capturing them in RAM.
-    digest, blocks = hashlib.sha256(), set()
     with tempfile.TemporaryFile() as out:
         result = subprocess.run(["icat", image, entry["inode"]], stdout=out,
                                 stderr=subprocess.PIPE, timeout=600, pass_fds=(fd,), env=system_environment())
         if result.returncode:
             raise EraseProofError("Cannot read an allocated file: "+result.stderr.decode(errors="replace")[-1000:])
-        length = out.tell()
         out.seek(0)
-        while data := out.read(512):
-            digest.update(data)
-            if len(data) == 512 and any(data):
-                blocks.add(hashlib.sha256(data).hexdigest())
-        samples = set()
-        for at in {0, max(0, length-64)}:
-            out.seek(at)
-            sample = out.read(min(64, length))
-            if any(sample):
-                samples.add(sample.hex())
-        return {"path": entry["path"], "inode": entry["inode"], "sha256": digest.hexdigest(), "size": length}, blocks, samples
+        return fingerprint_data(entry, iter(lambda: out.read(4*1024*1024), b""))
 
 
 def checked_image(path):
@@ -100,7 +113,7 @@ def erase_with(adapter, path, internal_path, confirmation, evidence_dir, progres
             raise EraseProofError("Image identity/size changed before preparation.")
         prepared, entries = adapter.prepare(stream, info, internal_path)
         if confirmation != prepared["confirmation"]:
-            raise EraseProofError("Confirm the image filename, colon, and exact internal path: "+prepared["confirmation"])
+            raise EraseProofError("Confirmation must match the image filename, colon, and exact internal path: "+prepared["confirmation"])
         attackgate.require_tools()
         fd, selected = stream.fileno(), {e["path"] for e in prepared["selected"]}
         preserved, hashes = [], set()

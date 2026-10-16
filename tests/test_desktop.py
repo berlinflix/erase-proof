@@ -68,14 +68,16 @@ def test_native_window_supports_a_small_vm_display(tmp_path):
     window.close()
 
 
-@pytest.mark.parametrize("filesystem", ["ext4", "NTFS", "exFAT"])
+@pytest.mark.parametrize("filesystem", ["FAT32", "ext4", "NTFS", "exFAT"])
 def test_native_offline_targeted_workflow(tmp_path, monkeypatch, filesystem):
     if filesystem == "ext4":
         from test_ext4 import fixture
     elif filesystem == "NTFS":
         from test_ntfs import fixture
-    else:
+    elif filesystem == "exFAT":
         from test_exfat import fixture
+    else:
+        from test_fat32 import fixture
     from PySide6.QtWidgets import QInputDialog
     image, *_ = fixture(tmp_path)
     application = QApplication.instance() or QApplication([])
@@ -87,7 +89,7 @@ def test_native_offline_targeted_workflow(tmp_path, monkeypatch, filesystem):
     window.list_fat()
     wait_for_job(application, window)
     assert "/private-case/" in window.targeted_details.toPlainText()
-    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: ("volume.img:/private-case", True))
+    monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: (image.name+":/private-case", True))
     window.erase_fat_target()
     wait_for_job(application, window)
     assert window.store.records()[0]["payload"]["verification"]["rrs"] == 0

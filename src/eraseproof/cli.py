@@ -14,7 +14,6 @@ from .evidence import EvidenceStore, verify_record
 from .models import EraseProofError
 from .targets import describe, devices, descendants, find_device
 from .files import plan_files, erase_files
-from .fat32 import Fat32, erase_path
 
 
 def references(path):
@@ -140,14 +139,7 @@ def parser():
     fe.add_argument("--confirm", required=True)
     fe.add_argument("--case", required=True)
     fe.add_argument("--keep-zeroed", action="store_true")
-    fs = sub.add_parser("fat32-list", help="List live/deleted entries in an offline FAT32 volume image")
-    fs.add_argument("image")
-    fw = sub.add_parser("fat32-erase", help="Erase a selected FAT32 image file/folder and known free-space copies")
-    fw.add_argument("image")
-    fw.add_argument("internal_path")
-    fw.add_argument("--confirm", required=True)
-    fw.add_argument("--case", required=True)
-    for filesystem in ("ext4", "ntfs", "exfat"):
+    for filesystem in ("fat32", "ext4", "ntfs", "exfat"):
         listing = sub.add_parser(filesystem+"-list", help="List allocated paths in an offline "+filesystem+" volume image")
         listing.add_argument("image")
         ep = sub.add_parser(filesystem+"-plan", help="Inspect offline "+filesystem+" targeted erasure and global history cleanup")
@@ -267,11 +259,6 @@ def main(argv=None):
             output = plan_files(args.target)
         elif args.command == "erase-files":
             output = erase_files(args.target, args.confirm, args.case, progress, unlink=not args.keep_zeroed)
-        elif args.command == "fat32-list":
-            with open(args.image, "rb") as stream:
-                output = list(Fat32(stream, Path(args.image).stat().st_size).walk())
-        elif args.command == "fat32-erase":
-            output = erase_path(args.image, args.internal_path, args.confirm, args.case, progress)
         elif args.command == "_validate":
             from .validators import worker
             worker(args.path, args.family)
@@ -285,10 +272,10 @@ def main(argv=None):
         elif args.command == "media-probe":
             from .media import probe
             output = probe(args.target)
-        elif args.command in {fs+"-"+action for fs in ("ext4", "ntfs", "exfat") for action in ("list", "plan", "erase")}:
-            from . import ext4, ntfs, exfat
+        elif args.command in {fs+"-"+action for fs in ("fat32", "ext4", "ntfs", "exfat") for action in ("list", "plan", "erase")}:
+            from .offline import backend
             filesystem, action = args.command.split("-", 1)
-            adapter = {"ext4": ext4, "ntfs": ntfs, "exfat": exfat}[filesystem]
+            adapter = backend(filesystem)
             if action == "list":
                 output = adapter.list_paths(args.image)
             elif action == "plan":

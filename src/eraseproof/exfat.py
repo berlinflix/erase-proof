@@ -3,7 +3,6 @@
 Layout follows Microsoft's public exFAT specification. No live mounts, repair,
 TexFAT writes, vendor allocations or guessed cluster chains are accepted.
 """
-import hashlib
 import os
 from pathlib import Path
 import struct
@@ -11,7 +10,7 @@ import sys
 
 from .carve import checkpoint
 from .models import EraseProofError
-from .offline import checked_image, erase_with, run
+from .offline import checked_image, erase_with, fingerprint_data, run
 from .targets import open_target
 
 name = "exfat"
@@ -248,24 +247,15 @@ def list_paths(path):
 def fingerprint(stream, entry):
     v = volume(stream)
     current = v.files[entry["path"]]
-    sha, blocks, head, tail, pending = hashlib.sha256(), set(), b"", b"", b""
-    remaining, valid = current["size"], current["valid"]
-    for cluster in current["chain"]:
-        count = min(remaining, v.cluster_size)
-        data = v.cluster(cluster)[:min(valid, count)]+bytes(max(0, count-valid))
-        valid = max(0, valid-count)
-        remaining -= count
-        sha.update(data)
-        head = (head+data)[:64]
-        tail = (tail+data)[-64:]
-        pending += data
-        for at in range(0, len(pending)//512*512, 512):
-            block = pending[at:at+512]
-            if any(block):
-                blocks.add(hashlib.sha256(block).hexdigest())
-        pending = pending[len(pending)//512*512:]
-    samples = {sample.hex() for sample in (head, tail) if any(sample)}
-    return {"path": current["path"], "inode": current["inode"], "sha256": sha.hexdigest(), "size": current["size"]}, blocks, samples
+    def chunks():
+        remaining, valid = current["size"], current["valid"]
+        for cluster in current["chain"]:
+            count = min(remaining, v.cluster_size)
+            data = v.cluster(cluster)[:min(valid, count)]+bytes(max(0, count-valid))
+            valid = max(0, valid-count)
+            remaining -= count
+            yield data
+    return fingerprint_data(current, chunks())
 
 
 def remove(stream, entry):

@@ -48,6 +48,14 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     logical.write_text("Native executable targeted erasure fixture")
     assert run("erase-files", logical, "--confirm", logical.name, "--case", root/"evidence")["payload"]["verification"]["passed"]
     assert not logical.exists()
+    fat_manifest = run("demo", "create", root/"fat-target")
+    fat_image = Path(fat_manifest["image"])
+    prepared = run("fat32-plan", fat_image, "/REPORT.PDF")
+    fat = run("fat32-erase", fat_image, "/REPORT.PDF", "--confirm", prepared["confirmation"], "--case", root/"evidence")
+    assert fat["payload"]["verification"]["rrs"] == 0
+    assert fat["payload"]["verification"]["independent_attack"]["passed"]
+    assert fat["payload"]["verification"]["preserved_files_hash_checked"] == 3
+    assert fat["payload"]["verification"]["cleanup"]["io"]["direct_bytes"] > 0
     ext4_image = root/"ext4.img"
     with ext4_image.open("xb") as stream:
         stream.truncate(32*1024*1024)
@@ -81,4 +89,4 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     gui.terminate()
     gui.wait(timeout=10)
     assert all(c["confidence"] >= 98 for c in recovery["candidates"] if c["method"] != "sleuthkit-metadata")
-    print(json.dumps({"binary": binary, "version": doctor["version"], "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_and_expected_signer_valid": True, "pdf_attachment_valid": True, "anchored_audit_intact": True, "independent_photorec_after_files": 0, "targeted_file_erasure": "passed", "native_direct_io_bytes": 64*1024*1024, "offline_ext4_erasure_and_preservation": "passed", "offline_ntfs_erasure_and_preservation": "passed", "native_qt_process_startup": "passed"}, indent=2))
+    print(json.dumps({"binary": binary, "version": doctor["version"], "runtime": doctor["platform"], "deleted_files_recovered_and_hash_matched": len(recovered), "total_findings": len(recovery["candidates"]), "rrs_after_overwrite": 0, "after_carving_candidates": 0, "signed_record_and_expected_signer_valid": True, "pdf_attachment_valid": True, "anchored_audit_intact": True, "independent_photorec_after_files": 0, "targeted_file_erasure": "passed", "native_direct_io_bytes": 64*1024*1024, "offline_fat32_erasure_and_preservation": "passed", "offline_ext4_erasure_and_preservation": "passed", "offline_ntfs_erasure_and_preservation": "passed", "native_qt_process_startup": "passed"}, indent=2))

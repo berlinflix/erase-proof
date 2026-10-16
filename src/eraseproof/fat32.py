@@ -3,17 +3,10 @@
 Only regular, unmounted images are writable here. No guessed cluster chains,
 live-filesystem block writes, journal edits or automatic filesystem repair.
 """
-import hashlib
-import os
-from pathlib import Path
 import struct
-import uuid
 
 from .carve import checkpoint
-from .evidence import EvidenceStore, now
 from .models import EraseProofError
-from .targets import describe, open_target
-from .runtime import system_environment
 
 
 class Fat32:
@@ -119,12 +112,16 @@ class Fat32:
                 entry = data[at:at+32]
                 if entry[0] == 0:
                     return
+                if entry[0] == 0xe5 and not any(entry[1:]):
+                    pending = []
+                    continue
                 offset = self.offset(allocated)+at
                 if entry[11] == 0x0f:
                     pending.append((offset, entry))
                     continue
                 slots = [p[0] for p in pending]+[offset]
-                long_name = "".join(self.long_fragment(p[1]) for p in reversed(pending))
+                raw_name = b"".join(p[1][1:11]+p[1][14:26]+p[1][28:32] for p in reversed(pending))
+                long_name = raw_name.decode("utf-16-le", errors="strict").split("\x00", 1)[0].replace("\uffff", "")
                 pending = []
                 if entry[11] & 8 or entry[:1] == b".":
                     continue
@@ -151,16 +148,6 @@ class Fat32:
                 if item["directory"] and not item["deleted"]:
                     yield from visit(item["cluster"], item["path"])
         yield from visit(self.root, "")
-
-
-def _check_image(path):
-    target = describe(path)
-    if target["kind"] != "image" or Path(path).suffix.lower() not in (".img", ".raw", ".dd", ".bin"):
-        raise EraseProofError("Targeted FAT32 writes are restricted to regular volume-image files.")
-    result = __import__("subprocess").run(["losetup", "--associated", target["path"]], capture_output=True, text=True, timeout=15, env=system_environment())
-    if result.returncode or result.stdout.strip():
-        raise EraseProofError("Image is attached to a loop device or attachment checks failed. Detach it before offline editing.")
-    return target
 
 
 def _selection(volume, internal_path):
@@ -191,93 +178,5 @@ def _selection(volume, internal_path):
 
 
 def erase_path(image, internal_path, confirmation, evidence_dir, progress=None, cancel=None):
-    target = _check_image(image)
-    expected = Path(image).name+":"+"/"+internal_path.strip("/")
-    if confirmation != expected:
-        raise EraseProofError("Confirmation must exactly match IMAGE_FILENAME:/internal/path.")
-    store = EvidenceStore(evidence_dir)
-    if not store.check():
-        raise EraseProofError("Audit integrity failed.")
-    store.key()
-    with open_target(image, writable=True) as stream:
-        volume = Fat32(stream, target["size"])
-        entries, selected, clusters = _selection(volume, internal_path)
-        fingerprints = set()
-        for cluster in clusters:
-            data = volume.read_cluster(cluster)
-            for at in range(0, len(data), volume.bps):
-                part = data[at:at+volume.bps]
-                if any(part):
-                    fingerprints.add(hashlib.sha256(part).hexdigest())
-        selected_names = {bytes.fromhex(e["short_hex"])[1:] for e in selected}
-        selected_set = set(clusters)
-        def external_slot(offset):
-            cluster = (offset//volume.bps-volume.data_sector)//volume.spc+2
-            return cluster not in selected_set
-        slots = {slot for item in selected for slot in item["slots"] if external_slot(slot)}
-        for item in entries:
-            if item["deleted"] and bytes.fromhex(item["short_hex"])[1:] in selected_names:
-                slots.update(slot for slot in item["slots"] if external_slot(slot))
-        history = []
-        for offset, part in volume.free_sectors(cancel, progress):
-            if hashlib.sha256(part).hexdigest() in fingerprints:
-                history.append(offset)
-        plan = {"image": target, "internal_path": internal_path, "files_and_folders": [e["path"] for e in selected],
-                "clusters": clusters, "metadata_slots": sorted(slots), "historical_sector_copies": len(history),
-                "scope": "FAT32 image allocation chains, current/deleted matching short-name metadata, and known aligned unallocated sector copies. Changed older versions and physical storage remain outside the proof."}
-        job = "ep-"+str(uuid.uuid4())
-        store.append("fat32-erasure.started", {"job": job, "plan": plan})
-        try:
-            for index, cluster in enumerate(clusters):
-                checkpoint(cancel)
-                stream.seek(volume.offset(cluster))
-                stream.write(bytes(volume.cluster_size))
-                if progress:
-                    progress("Erase target", (index+1)/max(len(clusters), 1), "Overwriting selected allocation chains")
-            for offset in history:
-                checkpoint(cancel)
-                stream.seek(offset)
-                stream.write(bytes(volume.bps))
-            for offset in sorted(slots):
-                stream.seek(offset)
-                stream.write(b"\xe5"+bytes(31))  # Deleted marker preserves later live directory entries.
-            for cluster in clusters:
-                for copy in range(volume.copies):
-                    stream.seek((volume.reserved+copy*volume.fat_sectors)*volume.bps+cluster*4)
-                    stream.write(bytes(4))
-            for sector in (volume.fsinfo, volume.backup+volume.fsinfo):
-                if 0 < sector < volume.reserved:
-                    stream.seek(sector*volume.bps)
-                    info = bytearray(stream.read(volume.bps))
-                    if info[:4] == b"RRaA" and info[484:488] == b"rrAa":
-                        info[488:496] = b"\xff"*8  # Free-space count/next-free unknown, never guessed.
-                        stream.seek(sector*volume.bps)
-                        stream.write(info)
-            os.fsync(stream.fileno())
-            after = Fat32(stream, target["size"])
-            nonzero = sum(len(data)-data.count(0) for data in (after.read_cluster(c) for c in clusters))
-            bad_slots = 0
-            for offset in slots:
-                stream.seek(offset)
-                if stream.read(32) != b"\xe5"+bytes(31):
-                    bad_slots += 1
-            remaining_hashes = set()
-            for offset, part in after.free_sectors(cancel, progress):
-                value = hashlib.sha256(part).hexdigest()
-                if value in fingerprints:
-                    remaining_hashes.add(value)
-            remaining_names = [e["path"] for e in after.walk() if bytes.fromhex(e["short_hex"])[1:] in selected_names]
-            passed = not nonzero and not bad_slots and not remaining_hashes and not remaining_names and all(after.value(c) == 0 for c in clusters)
-            result = {"passed": passed, "bytes_checked": len(clusters)*after.cluster_size+len(history)*after.bps,
-                      "nonzero_target_bytes": nonzero, "metadata_slots_failed": bad_slots, "remaining_reference_blocks": len(remaining_hashes),
-                      "metadata_residues": remaining_names, "rrs": (len(remaining_hashes)+len(remaining_names))/max(len(fingerprints)+len(selected_names), 1),
-                      "filesystem_preserved": True, "scope": plan["scope"], "all_filesystem_copies_verified": False}
-            if not passed:
-                raise EraseProofError("Target-specific residue verification failed. No certificate issued.")
-            return store.certify({"schema": "eraseproof.native-evidence.v1", "id": job,
-                                  "operation": "offline-fat32-targeted-erasure", "issued_at": now(), "target": target,
-                                  "plan": plan, "verification": result, "assurance": plan["scope"]})
-        except BaseException as error:
-            os.fsync(stream.fileno())
-            store.append("fat32-erasure.incomplete", {"job": job, "image": target["path"], "reason": str(error)})
-            raise
+    from .fat import erase_path as operation
+    return operation(image, internal_path, confirmation, evidence_dir, progress, cancel)

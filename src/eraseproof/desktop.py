@@ -22,7 +22,6 @@ from .engine import erase, plan, verify
 from .evidence import EvidenceStore, verify_record
 from .targets import describe, devices, descendants
 from .files import plan_files, erase_files
-from .fat32 import Fat32, erase_path
 from .runtime import system_environment
 
 
@@ -428,7 +427,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.registered("Overwrite & unlink…", self.erase_file_target, True))
         box.addLayout(row)
         layout.addWidget(logical)
-        offline, box = panel("Offline filesystem image", "Preserves unrelated allocated files. FAT32 removes target chains and known free-sector copies. Ext4, NTFS and exFAT also clear deleted history across the volume. Use an unattached volume image.")
+        offline, box = panel("Offline filesystem image", "Preserves unrelated allocated files. Cleanup removes the selected file or folder and clears deleted history across the volume. Use an unattached FAT32, ext4, NTFS or exFAT volume image.")
         self.offline_filesystem = QComboBox()
         self.offline_filesystem.addItems(["FAT32", "ext4", "NTFS", "exFAT"])
         box.addWidget(self.offline_filesystem)
@@ -523,20 +522,11 @@ class MainWindow(QMainWindow):
             self.on_error(str(error))
 
     def list_fat(self):
-        filesystem = self.offline_filesystem.currentText().lower()
-        if filesystem in ("ext4", "ntfs", "exfat"):
-            from . import ext4, ntfs, exfat
-            adapter = {"ext4": ext4, "ntfs": ntfs, "exfat": exfat}[filesystem]
-            path = self.fat_image.text()
-            return self.execute(lambda progress, cancel: adapter.list_paths(path),
-                                lambda result: self.targeted_details.setPlainText(json.dumps(result, indent=2)))
-        try:
-            path = self.fat_image.text()
-            with open(path, "rb") as stream:
-                entries = list(Fat32(stream, Path(path).stat().st_size).walk())
-            self.targeted_details.setPlainText(json.dumps(entries, indent=2))
-        except Exception as error:
-            self.on_error(str(error))
+        from .offline import backend
+        adapter = backend(self.offline_filesystem.currentText())
+        path = self.fat_image.text()
+        return self.execute(lambda progress, cancel: adapter.list_paths(path),
+                            lambda result: self.targeted_details.setPlainText(json.dumps(result, indent=2)))
 
     def erase_fat_target(self):
         path, internal = self.fat_image.text(), self.fat_internal.text()
@@ -545,7 +535,7 @@ class MainWindow(QMainWindow):
         warnings = {"ext4": "This also clears ALL unallocated history, unused inodes, directory slack and inactive journal blocks on this ext4 image.",
                     "ntfs": "This also clears ALL deleted history, free clusters, unused MFT/index space, $LogFile and allocated USN journal payload on this NTFS image.",
                     "exfat": "This also clears ALL deleted history, free clusters, stale free FAT links, inactive directory records and stream slack on this exFAT image.",
-                    "fat32": "This changes the actual FAT32 image allocation chains and metadata."}
+                    "fat32": "This also clears ALL deleted history, free clusters, deleted directory records and file/directory slack on this FAT32 image."}
         warning = warnings[filesystem]
         text, accepted = QInputDialog.getText(self, "Confirm offline targeted erasure", warning+"\n\nType exactly: "+expected)
         if not accepted:
@@ -555,11 +545,8 @@ class MainWindow(QMainWindow):
         def done(record):
             self.targeted_details.setPlainText(json.dumps(record, indent=2))
             self.status_label.setText("Selected target residue checks passed. Unrelated allocated files preserved.")
-        if filesystem in ("ext4", "ntfs", "exfat"):
-            from . import ext4, ntfs, exfat
-            operation = {"ext4": ext4, "ntfs": ntfs, "exfat": exfat}[filesystem].erase_path
-        else:
-            operation = erase_path
+        from .offline import backend
+        operation = backend(filesystem).erase_path
         self.execute(lambda progress, cancel: operation(path, internal, text, self.store.root, progress, cancel), done)
 
     def switch(self, index):

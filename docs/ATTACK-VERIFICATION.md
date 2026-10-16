@@ -1,10 +1,9 @@
 # Independent certification gate
 
-Whole-image overwrite and the shared ext4/NTFS/exFAT offline coordinator require
+Whole-image overwrite and the shared FAT32/ext4/NTFS/exFAT offline coordinator require
 PhotoRec, Sleuth Kit and bulk_extractor before issuing a verification record.
-Dependency checks run before the first destructive write. FAT32's earlier
-allocation-only adapter and ordinary logical file overwrite retain their stated,
-narrower scope; unifying the FAT32 adapter is tracked separately.
+Dependency checks run before the first destructive write. Ordinary logical file
+overwrite retains its narrower current-byte scope and excludes volume history.
 
 The native verifier first checks the current logical image and target references.
 The independent tools then receive the same pinned source descriptor. Both image

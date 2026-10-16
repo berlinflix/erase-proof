@@ -19,18 +19,21 @@ def tool(*arguments):
     return result.stdout.decode().strip()
 
 
-def empty_image(tmp_path):
+def empty_image(tmp_path, filesystem="exfat"):
     image = tmp_path/"volume.img"
     with image.open("xb") as stream:
         stream.truncate(64*1024*1024)
-    tool("mkfs.exfat", image)
+    if filesystem == "fat32":
+        tool("mkfs.fat", "-F", "32", image)
+    else:
+        tool("mkfs.exfat", image)
     return image
 
 
-def fixture(tmp_path):
+def fixture(tmp_path, filesystem="exfat", extra_name=None):
     if os.geteuid() != 0 or os.environ.get("ERASEPROOF_TEST_PRIVATE_MOUNTS") != "1":
         pytest.skip("Run exFAT driver tests as root under unshare --mount --propagation private with ERASEPROOF_TEST_PRIVATE_MOUNTS=1")
-    image = empty_image(tmp_path)
+    image = empty_image(tmp_path, filesystem)
     mountpoint = tmp_path/"mnt"
     mountpoint.mkdir()
     loop, mounted = None, False
@@ -41,11 +44,16 @@ def fixture(tmp_path):
         association = json.loads(tool("losetup", "--list", "--json", "--output", "NAME,BACK-FILE", loop))["loopdevices"][0]
         if Path(association["back-file"]).resolve() != image.resolve():
             raise RuntimeError("Unexpected loop backing file; mount refused")
-        tool("mount.exfat-fuse", loop, mountpoint)
+        if filesystem == "fat32":
+            tool("mount", "-t", "vfat", "-o", "utf8=1", loop, mountpoint)
+        else:
+            tool("mount.exfat-fuse", loop, mountpoint)
         mounted = True
         private = mountpoint/"private-case"
         private.mkdir()
         (private/"small-secret.bin").write_bytes(secret)
+        if extra_name:
+            (private/extra_name).write_bytes(secret)
         (private/"large-secret.bin").write_bytes(large)
         (mountpoint/"keep-日本-Ω.txt").write_bytes(keep)
         history = mountpoint/"old-copy-私.bin"
