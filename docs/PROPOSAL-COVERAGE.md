@@ -7,10 +7,10 @@ validation. Oracle VirtualBox acceptance is deferred by the user.
 
 | Requirement | Implementation / evidence | Remaining acceptance |
 | --- | --- | --- |
-| Native Ubuntu CLI and desktop, live USB | Qt application and Ubuntu 24.04 BIOS/UEFI ISO; released 0.11; QEMU boot and frozen workflow results | Rebuild after new milestones; actual VirtualBox demo |
+| Native Ubuntu CLI and desktop, live USB | Qt application and Ubuntu 24.04 BIOS/UEFI ISO; final 0.12 source passed 216 tests, frozen workflows and visually reviewed QEMU boot routes | Actual VirtualBox demo |
 | Normally deleted files, independent of demo filenames or references | Metadata recovery, ext4 historical inode maps, raw carving, Ubuntu Trash copies; 24 exact fresh-file recoveries across four filesystems; public DFRWS and 16-case Govdocs measurements | Recovery depends on surviving bytes/allocation; unsupported types remain in the public recall denominator |
 | File extent discovery, current-byte overwrite, metadata/history cleanup | FIEMAP and C direct I/O; offline FAT32/ext4/NTFS/exFAT global free-space, deleted metadata, journal/log/slack cleanup and preserved-file checks | Mounted-file erasure remains explicitly current-byte only; acquisition/offline cleanup required for history |
-| SHA-256 per 4 KiB plus ssdeep | Streaming fingerprints in file/offline erasers; standalone `fingerprint`; native and independent recovered-byte similarity checks; 174 source tests and frozen agreement check passed | Final distribution acceptance |
+| SHA-256 per 4 KiB plus ssdeep | Streaming fingerprints in file/offline erasers; standalone `fingerprint`; native and independent recovered-byte similarity checks; 216 source tests and frozen agreement check passed | Similarity remains a heuristic; exact hashes provide separate identity evidence |
 | Bifragment gap carving | Bounded PNG/ZIP/PDF/JPEG search, isolated unprivileged workers, decoder-guided JPEG boundaries and structural gap inference; fresh exact-file tests and two public fragmented JPEG recoveries | Declared resource/gap/format limits remain; arbitrary fragmentation is not guaranteed |
 | Validation, confidence and entropy | Isolated image/ZIP/PDF/SQLite validators; explicit validation/completeness/entropy components for recovered files; public DFRWS exact-byte comparison | Scores are structural heuristics, not calibrated original-byte probabilities; population-wide statistical calibration is not claimed |
 | Controller capability discovery | Linux inventory, sysfs ancestry, native pinned NVMe identity, ATA IDENTIFY/HPA/DCO integrity checks | Physical controller behavior |
@@ -21,9 +21,9 @@ validation. Oracle VirtualBox acceptance is deferred by the user.
 | HDD/USB/SD overwrite, discard and hidden-media distinction | Guarded host-device overwrite/full logical readback and independent attacks; separate discard receipts | Physical media evaluation; hidden flash/chip-off assurance is not inferred |
 | Encrypted storage discovery and crypto erase | Real LUKS2 image keyslot removal; BitLocker/partition signatures and bounded native TCG Level 0 discovery | Physical SED/BitLocker evaluation; external/cached keys remain outside local deletion |
 | Independent verification | Required PhotoRec/TSK/bulk_extractor, output-byte comparison, exact/fuzzy mutation checks, completeness/resource gates, source continuity | Population-wide false-positive/negative estimates require broader research |
-| Ed25519 JSON, audit chain, PDF and offline QR | Implemented, signatures/anchors and attached JSON validated | Rebuilt final artifacts |
+| Ed25519 JSON, audit chain, PDF and offline QR | Implemented, final executable signatures/anchors and attached JSON validated | Operator identity requires an independently trusted signer fingerprint |
 | Closed-loop escalation | Confirmed NVMe/ATA method chains, completion/action-log or observed ATA busy-transition checks, full-range attacks and zero-score certificate gate; actual QEMU NVMe Format/attack/certify run; uncertainty/incomplete attacks and post-attack identity/capacity changes block retry/certification | Physical firmware acceptance; a fast ATA sanitize with no observed busy transition requires manual inspection |
-| Safety | Device allowlist, typed identity, mounted/root/holder refusal, dry-run plans; generated-image/owned-VM tests only | Regression for each newly introduced hardware command |
+| Safety | Device allowlist, typed identity, mounted/root/holder refusal, dry-run plans, native command-boundary and uncertainty tests; generated-image/owned-VM tests only | Physical-device acceptance |
 | E1–E5 research evaluation | Real 1–8 GiB images, residue mutations, public DFRWS/PhotoRec/Foremost comparison, 16-case Govdocs 1 GiB study and measured dd/C/pipeline overhead | Physical method measurements; broad statistical confidence calibration is not claimed |
 
 The complete proposal is not yet accepted. Physical sanitization, hidden flash

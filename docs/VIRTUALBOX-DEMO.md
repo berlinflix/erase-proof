@@ -65,3 +65,11 @@ no NIC or host-device passthrough. Default release boot settings are unchanged.
 The script and result are supplemental validation on GitHub main; the frozen
 0.11 release archives retain their original build provenance. This is QEMU
 evidence, not Oracle VirtualBox acceptance or physical-media validation.
+
+The final 0.12 release repeats the secondary-disk test and adds a real virtual
+NVMe Format/attack/certify run. Both recover a fresh arbitrary-format deleted
+file exactly, preserve the source during recovery, and pass complete host-side
+zero readback after the operation. The NVMe run exercises SES=1 user-data Format
+through the native ioctl; it does not validate physical crypto erase. Exact
+results: [logical overwrite](validation/virtual-block-0.12.json),
+[NVMe workflow](validation/virtual-nvme-0.12.json).

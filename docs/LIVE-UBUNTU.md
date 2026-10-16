@@ -85,6 +85,13 @@ The graphical screen still requires visual inspection.
 Actual build/boot results are tracked in [MILESTONES.md](MILESTONES.md).
 Oracle VirtualBox acceptance is deferred at the user's request.
 
+The final 0.12 ISO passed BIOS/UEFI graphical boots and its expanded guest
+workflow on QEMU/KVM. The verified ISO SHA-256 is
+`6618bfc7e95dcf0813a82dba13d2280ca726a276d69a76863ab25ae245e93c1e`.
+The expanded guest check passed in 79.641 seconds when run alone. A concurrent
+three-VM attempt hit the self-test service's 180-second limit; allocate resources
+for one engine acceptance guest at a time. See [final validation](validation-0.12.json).
+
 The 0.3 image was built and booted on 16 October 2026 using QEMU/KVM. Its real
 BIOS and UEFI GRUB routes reached the native desktop. Screens were reviewed at
 1920×1080 and 1024×768; the smaller display uses a scrolling content area.

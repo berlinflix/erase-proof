@@ -65,7 +65,13 @@ source-installation parser regression also passes; trusted code loads before
 privilege drop, with all untrusted parsing still performed without root.
 Actual QEMU NVMe Format and Format/attack/certify workflows passed on generated
 64 MiB disks, including exact normal-deletion recovery and independent complete
-host-file zero readback. The final rebuild/full regression follows these fixes.
+host-file zero readback. Final application source `3302845` passed all **216
+tests** in a private root mount namespace and passed GitHub CI. Its standalone
+executable passed the expanded workflow, including ATA ordinary-file refusal.
+The final ISO passed visually reviewed BIOS/UEFI desktops, the expanded Ubuntu
+24.04 guest workflow and both secondary-disk protocols. The complete guest
+workflow passed in 79.641 seconds when run alone; a three-VM concurrent attempt
+hit its 180-second service limit. See [final validation](validation-0.12.json).
 
 Software tests use generated images and mock hardware command boundaries.
 The supplemental QEMU block-device test also passed exact unknown-format

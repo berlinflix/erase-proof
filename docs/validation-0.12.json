@@ -1,0 +1,123 @@
+{
+  "schema": "eraseproof.development-validation.v1",
+  "version": "0.12.0",
+  "date": "2026-10-16",
+  "assurance": "Observed development checks; not independent certification or a reproducible-build attestation.",
+  "app_core_commit": "33028454ac3c63c4e2d223316f7317b46b483d58",
+  "app_executable_sha256": "59be381a5a8866289cefd2a0e47f38dc0ff89e9880aabd967c57900a95fd1aee",
+  "iso_bundle_manifest_sha256": "789696aa46fdae1246d23b026fec1ba9797af82bf6698ebd1e602f50fc6523e8",
+  "wsl_ubuntu_22_04": {
+    "full_root_private_mount_regression_passed": 216,
+    "seconds": 493.38,
+    "standalone_workflow": {
+      "binary": "EraseProof/EraseProof",
+      "version": "0.12.0",
+      "runtime": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+      "deleted_files_recovered_and_hash_matched": 4,
+      "total_findings": 7,
+      "rrs_after_overwrite": 0,
+      "after_carving_candidates": 0,
+      "signed_record_and_expected_signer_valid": true,
+      "pdf_attachment_valid": true,
+      "anchored_audit_intact": true,
+      "independent_photorec_after_files": 0,
+      "targeted_file_erasure": "passed",
+      "native_direct_io_bytes": 67108864,
+      "offline_fat32_erasure_and_preservation": "passed",
+      "offline_ext4_erasure_and_preservation": "passed",
+      "offline_ntfs_erasure_and_preservation": "passed",
+      "native_qt_process_startup": "passed"
+    },
+    "source_and_frozen_ata_regular_file_refusal": "passed",
+    "private_source_parser_privilege_drop": "passed",
+    "prepared_bundle_integrity_tests": "passed"
+  },
+  "ubuntu_24_04_live": {
+    "iso_sha256": "6618bfc7e95dcf0813a82dba13d2280ca726a276d69a76863ab25ae245e93c1e",
+    "hypervisor": "QEMU/KVM",
+    "boots": [
+      {
+        "iso_sha256": "6618bfc7e95dcf0813a82dba13d2280ca726a276d69a76863ab25ae245e93c1e",
+        "acceleration": "kvm",
+        "hard_disks_attached": 0,
+        "mode": "BIOS-GRUB",
+        "serial_boot_condition": "passed",
+        "duration_seconds": 46.86906681799974,
+        "screenshot": "bios-screen.png (local QA artifact)",
+        "visual_gui_review": "passed",
+        "virtualbox_tested": false
+      },
+      {
+        "iso_sha256": "6618bfc7e95dcf0813a82dba13d2280ca726a276d69a76863ab25ae245e93c1e",
+        "acceleration": "kvm",
+        "hard_disks_attached": 0,
+        "mode": "UEFI-GRUB",
+        "serial_boot_condition": "passed",
+        "duration_seconds": 59.90647524499991,
+        "screenshot": "uefi-screen.png (local QA artifact)",
+        "visual_gui_review": "passed",
+        "virtualbox_tested": false
+      },
+      {
+        "iso_sha256": "6618bfc7e95dcf0813a82dba13d2280ca726a276d69a76863ab25ae245e93c1e",
+        "acceleration": "kvm",
+        "hard_disks_attached": 0,
+        "mode": "generated-image-engine-selftest",
+        "serial_boot_condition": "passed",
+        "duration_seconds": 79.64130028399995,
+        "screenshot": "engine-screen.png (local QA artifact)",
+        "visual_gui_review": "passed",
+        "virtualbox_tested": false
+      }
+    ]
+  },
+  "qemu_generated_secondary_disks": {
+    "virtual-block": {
+      "result": "docs/validation/virtual-block-0.12.json",
+      "sha256": "b93ba2ef7e08b41644664ba1fcf6e95f3411b1007bbc12c78b53ccbd5c2e0a6a"
+    },
+    "virtual-nvme": {
+      "result": "docs/validation/virtual-nvme-0.12.json",
+      "sha256": "34dd296b425f977fd78689d60e2199ba604a83773e05dbb208a334e8a78e3af8"
+    }
+  },
+  "public_evaluations": {
+    "dfrws": {
+      "path": "docs/validation/dfrws-0.12.json",
+      "sha256": "804527a84fef78bb0ee3715a7a78c2ae7185b742bd17782a1bc1020a46512701"
+    },
+    "govdocs": {
+      "path": "docs/validation/govdocs-0.12.json",
+      "sha256": "9dcd6c225658f99c17e0a94efab6c52fc0fcacc9a5f717e1d85cab151c31e8a6"
+    },
+    "confidence": {
+      "path": "docs/validation/confidence-0.12.json",
+      "sha256": "0b800dc00bf27fe0222c2701294a9e1815e13b6a15dd792f04db098de0b70d7a"
+    },
+    "overhead": {
+      "path": "docs/validation/overhead-0.12.json",
+      "sha256": "690598ebb1443ac05d0a8c2e608507c8b40c71d88b7ae41bd092a059d0a3bf16"
+    }
+  },
+  "software_scope_implemented": true,
+  "research_proposal_complete": false,
+  "oracle_virtualbox_acceptance": "deferred by user; not performed",
+  "physical_firmware_or_remanence_validation": "not performed",
+  "standards_conformance": "not independently assessed",
+  "remaining_external_acceptance": [
+    "Oracle VirtualBox demo",
+    "Spare physical ATA/NVMe/USB/SD method and hidden-capacity evaluation",
+    "Physical crypto/flash-cell/remapped-block/chip-off evidence",
+    "Independent standards assessment and broader confidence calibration"
+  ],
+  "limits": [
+    "No universal fragmented-file recovery guarantee",
+    "Recovery requires surviving bytes or allocation information",
+    "Mounted-file overwrite covers current logical bytes; history uses offline volume cleanup",
+    "Snapshots, backups, external/cached keys and copies outside the confirmed scope are excluded",
+    "ATA sanitize without an observed busy transition remains uncorrelated and cannot automatically retry/certify",
+    "QEMU NVMe Format exercised SES=1, not physical crypto erase",
+    "A three-VM concurrent guest self-test hit its 180-second service limit; final engine acceptance was run alone. Timings depend on VM resources."
+  ],
+  "distribution": "Each artifact retains its own packaging provenance. Release checksums and archive verification are recorded separately after packaging."
+}

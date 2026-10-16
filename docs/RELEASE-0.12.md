@@ -67,9 +67,9 @@ Embedded files and partial reconstructions count as nonexact in this strict
 original-file-hash metric. Unsupported original file types remain in the recall
 denominator. These figures are not a promise of universal fragmented recovery.
 
-The expanded **213-test regression passed** after the ATA coordinator and
-identity-binding changes, in a private root mount namespace. The final
-unknown-sanitize-status guard passed all 36 focused firmware/workflow checks.
+All **216 tests passed** on final committed source `3302845` in a private root
+mount namespace. GitHub CI also passed. The final unknown-sanitize-status guard
+passed all 36 focused firmware/workflow checks.
 The standalone executable passed fresh PNG/JPEG reconstruction,
 independent ssdeep agreement, recovery/erasure, filesystem preservation, trusted
 signatures, attached PDF evidence, anchored audit and native Qt startup.
