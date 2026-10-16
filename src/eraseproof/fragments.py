@@ -232,6 +232,10 @@ def worker(fd, offset, kind, total, attempts, seconds):
     # until privileges have been dropped and only the read-only FD remains.
     from PIL import Image
     Image.init()
+    # Preload our trusted parser code too: root may run a source installation
+    # under a private home directory which nobody cannot traverse after setuid.
+    from .carve import identify, reassemble_png
+    from .validators import check
     from .jpegcheck import library as jpeg_library
     jpeg_library()
     if os.geteuid() == 0:
@@ -241,7 +245,6 @@ def worker(fd, offset, kind, total, attempts, seconds):
     budget = Budget(attempts, seconds)
     result, error = None, None
     try:
-        from .carve import identify, reassemble_png
         with os.fdopen(fd, 'rb', buffering=0) as stream:
             current = identify(stream, offset, kind, total)
             valid = current is not None and current.confidence >= 90

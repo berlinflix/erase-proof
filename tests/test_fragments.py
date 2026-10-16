@@ -2,6 +2,10 @@ import hashlib
 import io
 import os
 import zipfile
+from pathlib import Path
+import shutil
+import subprocess
+import sys
 
 from PIL import Image
 import pytest
@@ -9,6 +13,34 @@ import pytest
 from eraseproof.fragments import Budget, reconstruct, zip_valid
 from eraseproof.models import Cancelled, EraseProofError
 from eraseproof import carve
+
+
+@pytest.mark.skipif(os.geteuid() != 0, reason='Checks parser privilege drop from a root-only source installation')
+def test_fragment_worker_can_load_private_source_before_dropping_root(tmp_path):
+    private = tmp_path/'private-install'
+    private.mkdir(mode=0o700)
+    package = private/'eraseproof'
+    source = Path(carve.__file__).parent
+    shutil.copytree(source, package, ignore=shutil.ignore_patterns('resources', '__pycache__'))
+    native = package/'resources/native'
+    native.mkdir(parents=True)
+    shutil.copy2(source/'resources/native/liberaseproof_jpeg.so', native)
+    buffer = io.BytesIO()
+    Image.frombytes('RGB', (113, 81), os.urandom(113*81*3)).save(buffer, 'PNG')
+    payload = buffer.getvalue()
+    image = private/'fresh.img'
+    image.write_bytes(bytes(512)+payload[:1536]+os.urandom(512)+payload[1536:]+bytes(512))
+    script = '''import hashlib,sys
+from eraseproof import carve
+from pathlib import Path
+path = Path(sys.argv[1])
+data = path.read_bytes()
+found = carve.scan(path, fragmented=True)
+assert any(hashlib.sha256(b''.join(data[a:a+n] for a,n in c.segments)).hexdigest() == sys.argv[2] for c in found), found
+'''
+    result = subprocess.run([sys.executable, '-c', script, str(image), hashlib.sha256(payload).hexdigest()],
+                            env={**os.environ, 'PYTHONPATH': str(private)}, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout+result.stderr
 
 
 @pytest.mark.parametrize("kind", ["PNG", "ZIP"])
