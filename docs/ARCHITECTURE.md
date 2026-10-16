@@ -67,7 +67,12 @@ plus ntfswipe, with complete free-cluster and allocated USN readback. Both keep
 filesystem-specific pre/post consistency gates and fail without certification
 when unknown free-space bytes remain.
 
-Remaining implementation/evaluation covers exFAT targeted history cleanup, broader fragmentation, ATA destructive commands, HPA/DCO changes, privileged orchestration, unknown snapshots/copies, public operator trust infrastructure and physical-media sanitization assurance. The C I/O and offline filesystem components are unprivileged and use policy-checked descriptors. No mounted filesystem is scrubbed through guessed raw extents or blind journal edits.
+The exFAT adapter validates both boot regions and all bitmap/FAT allocation
+ownership, including contiguous streams and fragmented chains. It clears free
+allocation, inactive directory records and stream slack, then separately reads
+those regions back. It rejects unknown allocations and TexFAT layouts.
+
+Remaining implementation/evaluation covers broader fragmentation, ATA destructive commands, HPA/DCO changes, privileged orchestration, unknown snapshots/copies, public operator trust infrastructure and physical-media sanitization assurance. The C I/O and offline filesystem components are unprivileged and use policy-checked descriptors. No mounted filesystem is scrubbed through guessed raw extents or blind journal edits.
 
 The default image experiment and GUI flow are tested in WSL Ubuntu. VirtualBox guest device I/O and physical media need separate acceptance tests; a VM result must not be presented as host SSD sanitization.
 

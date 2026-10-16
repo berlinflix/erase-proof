@@ -68,12 +68,14 @@ def test_native_window_supports_a_small_vm_display(tmp_path):
     window.close()
 
 
-@pytest.mark.parametrize("filesystem", ["ext4", "NTFS"])
+@pytest.mark.parametrize("filesystem", ["ext4", "NTFS", "exFAT"])
 def test_native_offline_targeted_workflow(tmp_path, monkeypatch, filesystem):
     if filesystem == "ext4":
         from test_ext4 import fixture
-    else:
+    elif filesystem == "NTFS":
         from test_ntfs import fixture
+    else:
+        from test_exfat import fixture
     from PySide6.QtWidgets import QInputDialog
     image, *_ = fixture(tmp_path)
     application = QApplication.instance() or QApplication([])

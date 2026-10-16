@@ -147,7 +147,7 @@ def parser():
     fw.add_argument("internal_path")
     fw.add_argument("--confirm", required=True)
     fw.add_argument("--case", required=True)
-    for filesystem in ("ext4", "ntfs"):
+    for filesystem in ("ext4", "ntfs", "exfat"):
         listing = sub.add_parser(filesystem+"-list", help="List allocated paths in an offline "+filesystem+" volume image")
         listing.add_argument("image")
         ep = sub.add_parser(filesystem+"-plan", help="Inspect offline "+filesystem+" targeted erasure and global history cleanup")
@@ -201,10 +201,11 @@ def main(argv=None):
         if args.command == "doctor":
             from .nativeio import library
             output = {"version": __version__, "platform": platform.platform(), "python": sys.version.split()[0],
-                      "tools": {name: shutil.which(name) for name in ("lsblk", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm")},
+                      "tools": {name: shutil.which(name) for name in ("lsblk", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm", "e2fsck", "ntfsfix", "ntfsresize", "ntfswipe", "fsck.exfat", "cryptsetup", "prlimit")},
                       "native_direct_io": library() is not None,
                       "offline_ext4_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4").is_file(),
                       "offline_ntfs_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ntfs").is_file(),
+                      "offline_exfat_adapter": True,
                       "ext4_journal_reader": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4-journal").is_file(),
                       "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":
@@ -282,10 +283,10 @@ def main(argv=None):
         elif args.command == "media-probe":
             from .media import probe
             output = probe(args.target)
-        elif args.command in {fs+"-"+action for fs in ("ext4", "ntfs") for action in ("list", "plan", "erase")}:
-            from . import ext4, ntfs
+        elif args.command in {fs+"-"+action for fs in ("ext4", "ntfs", "exfat") for action in ("list", "plan", "erase")}:
+            from . import ext4, ntfs, exfat
             filesystem, action = args.command.split("-", 1)
-            adapter = {"ext4": ext4, "ntfs": ntfs}[filesystem]
+            adapter = {"ext4": ext4, "ntfs": ntfs, "exfat": exfat}[filesystem]
             if action == "list":
                 output = adapter.list_paths(args.image)
             elif action == "plan":

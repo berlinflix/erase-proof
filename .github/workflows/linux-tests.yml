@@ -27,3 +27,5 @@ jobs:
         run: python -m pytest -q
       - name: Recover independently generated files after ordinary OS deletion
         run: sudo "$(command -v python)" scripts/verify-normal-deletion.py --output qa/normal-deletion
+      - name: Validate exFAT cleanup through actual mounted-driver fixtures
+        run: sudo unshare --mount --propagation private env ERASEPROOF_TEST_PRIVATE_MOUNTS=1 QT_QPA_PLATFORM=offscreen "$(command -v python)" -m pytest tests/test_exfat.py tests/test_desktop.py -q

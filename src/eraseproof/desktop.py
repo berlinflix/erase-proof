@@ -428,9 +428,9 @@ class MainWindow(QMainWindow):
         row.addWidget(self.registered("Overwrite & unlink…", self.erase_file_target, True))
         box.addLayout(row)
         layout.addWidget(logical)
-        offline, box = panel("Offline filesystem image", "Preserves unrelated allocated files. FAT32 removes target chains and known free-sector copies. Ext4 and NTFS also clear deleted history across the volume, including journal and unused metadata. Use an unattached volume image.")
+        offline, box = panel("Offline filesystem image", "Preserves unrelated allocated files. FAT32 removes target chains and known free-sector copies. Ext4, NTFS and exFAT also clear deleted history across the volume. Use an unattached volume image.")
         self.offline_filesystem = QComboBox()
-        self.offline_filesystem.addItems(["FAT32", "ext4", "NTFS"])
+        self.offline_filesystem.addItems(["FAT32", "ext4", "NTFS", "exFAT"])
         box.addWidget(self.offline_filesystem)
         self.fat_image = QLineEdit()
         self.source_row(box, self.fat_image)
@@ -524,9 +524,9 @@ class MainWindow(QMainWindow):
 
     def list_fat(self):
         filesystem = self.offline_filesystem.currentText().lower()
-        if filesystem in ("ext4", "ntfs"):
-            from . import ext4, ntfs
-            adapter = {"ext4": ext4, "ntfs": ntfs}[filesystem]
+        if filesystem in ("ext4", "ntfs", "exfat"):
+            from . import ext4, ntfs, exfat
+            adapter = {"ext4": ext4, "ntfs": ntfs, "exfat": exfat}[filesystem]
             path = self.fat_image.text()
             return self.execute(lambda progress, cancel: adapter.list_paths(path),
                                 lambda result: self.targeted_details.setPlainText(json.dumps(result, indent=2)))
@@ -544,6 +544,7 @@ class MainWindow(QMainWindow):
         expected = Path(path).name+":"+"/"+internal.strip("/")
         warnings = {"ext4": "This also clears ALL unallocated history, unused inodes, directory slack and inactive journal blocks on this ext4 image.",
                     "ntfs": "This also clears ALL deleted history, free clusters, unused MFT/index space, $LogFile and allocated USN journal payload on this NTFS image.",
+                    "exfat": "This also clears ALL deleted history, free clusters, stale free FAT links, inactive directory records and stream slack on this exFAT image.",
                     "fat32": "This changes the actual FAT32 image allocation chains and metadata."}
         warning = warnings[filesystem]
         text, accepted = QInputDialog.getText(self, "Confirm offline targeted erasure", warning+"\n\nType exactly: "+expected)
@@ -554,9 +555,9 @@ class MainWindow(QMainWindow):
         def done(record):
             self.targeted_details.setPlainText(json.dumps(record, indent=2))
             self.status_label.setText("Selected target residue checks passed. Unrelated allocated files preserved.")
-        if filesystem in ("ext4", "ntfs"):
-            from . import ext4, ntfs
-            operation = {"ext4": ext4, "ntfs": ntfs}[filesystem].erase_path
+        if filesystem in ("ext4", "ntfs", "exfat"):
+            from . import ext4, ntfs, exfat
+            operation = {"ext4": ext4, "ntfs": ntfs, "exfat": exfat}[filesystem].erase_path
         else:
             operation = erase_path
         self.execute(lambda progress, cancel: operation(path, internal, text, self.store.root, progress, cancel), done)
