@@ -26,6 +26,8 @@ if [[ -e "$root/opt/eraseproof" ]]; then
   mv -T -- "$root/opt/eraseproof" "$work/previous-app-$(date +%s%N)"
 fi
 mv -T -- "$stage" "$root/opt/eraseproof"
+install -m 755 "$scripts/live-boot-check.sh" "$root/usr/local/bin/eraseproof-boot-check"
+install -m 644 "$scripts/verify-frozen.py" "$root/usr/local/lib/eraseproof-verify-frozen.py"
 "$bundle/EraseProof" --cli --version > "$work/iso/.disk/eraseproof-version"
 du -sx --block-size=1 "$root" | cut -f1 > "$work/iso/casper/filesystem.size"
 mksquashfs "$root" "$work/iso/casper/filesystem.squashfs" -comp zstd -Xcompression-level 15 -noappend -processors 4 -no-progress

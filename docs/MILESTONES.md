@@ -58,6 +58,15 @@ confidence buckets and dd/C/full-pipeline CPU/throughput measurements are retain
 under `docs/validation`. Live packaging includes the self-test dependency and
 third-party notices; final boot/NVMe acceptance follows.
 
+The final 0.12 requirements audit adds an ATA method-chain coordinator, strict
+sanitize busy-transition correlation, full factory-range recovery checks and
+post-attack identity/capacity gates. Its **44 focused tests passed**. A private
+source-installation parser regression also passes; trusted code loads before
+privilege drop, with all untrusted parsing still performed without root.
+Actual QEMU NVMe Format and Format/attack/certify workflows passed on generated
+64 MiB disks, including exact normal-deletion recovery and independent complete
+host-file zero readback. The final rebuild/full regression follows these fixes.
+
 Software tests use generated images and mock hardware command boundaries.
 The supplemental QEMU block-device test also passed exact unknown-format
 recovery from a generated raw disk, unchanged source reads, 64 MiB of native

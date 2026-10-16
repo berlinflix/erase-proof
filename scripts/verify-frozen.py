@@ -28,6 +28,11 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-release-") as temporary:
     original = os.urandom(63179)
     reference_file = root/'fresh.custom'
     reference_file.write_bytes(original)
+    ata_refusal = subprocess.run([binary, '--cli', 'ata-workflow-plan', str(reference_file),
+        '--methods', 'logical-overwrite', '--allow-device', str(reference_file), '--confirm', reference_file.name],
+        capture_output=True, text=True, timeout=15)
+    assert ata_refusal.returncode == 1 and 'Device is absent' in ata_refusal.stderr
+    assert reference_file.read_bytes() == original
     fingerprint = run('fingerprint', reference_file)
     independent_fuzzy = subprocess.run(['ssdeep', '-b', str(reference_file)], capture_output=True, text=True, check=True).stdout.splitlines()[1].split(',', 1)[0]
     assert fingerprint['fingerprint']['ssdeep'] == independent_fuzzy
