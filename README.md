@@ -137,15 +137,15 @@ unprivileged and does not silently escalate permissions. See the
 
 ## Assurance and remaining work
 
-The **Media methods** page and CLI inspect native NVMe/ATA capabilities and software LUKS2 images. A guarded CLI adapter can submit controller-wide NVMe block/crypto sanitize with all-namespace checks, but returns an audited firmware receipt rather than an erasure certificate. LUKS2 keyslot removal has been tested on a real generated image. See [media operations and boundaries](docs/MEDIA.md) before using hardware commands. ATA destructive commands and HPA/DCO changes remain disabled.
+The **Media methods** page and CLI inspect native NVMe/ATA capabilities and software LUKS2 images. Guarded native adapters implement NVMe sanitize/Format, ATA sanitize/Enhanced Secure Erase and explicitly confirmed HPA/DCO expansion. Their signed firmware receipts distinguish command completion from independently verified erasure. LUKS2 keyslot removal has been tested on a real generated image. See [media operations and boundaries](docs/MEDIA.md) for capability, identity and scope requirements.
 
-This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
+This release implements native recovery, logical overwrite, guarded firmware methods and independent recovery verification. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
 
 `media-plan TARGET` supplies the read-only method matrix used by the desktop,
 including executable commands, capability failures, hidden-capacity gates and
-disabled methods. ATA destructive adapters, HPA/DCO changes, broader fragment
-reconstruction, physical-media evaluation and independently assessed standards
-mapping remain outside the implemented scope. There is no claim that this
+unavailable methods. Bounded PNG/ZIP/PDF/JPEG bifragment reconstruction and public
+corpus measurements are included. Physical-media evaluation and independently
+assessed standards conformance remain unverified. There is no claim that this
 release securely deletes every copy of a host file or fulfills NIST/IEEE
 sanitization requirements.
 

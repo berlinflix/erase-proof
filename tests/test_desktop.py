@@ -10,6 +10,18 @@ from PySide6.QtWidgets import QApplication
 from eraseproof.desktop import MainWindow, STYLE
 
 
+@pytest.fixture(autouse=True)
+def reject_unexpected_operation_dialogs(monkeypatch):
+    # A failed background operation opens a modal warning. In unattended CI,
+    # that dialog can otherwise wait forever inside processEvents(). Retain
+    # the real failure text and fail the test after the job has stopped.
+    from PySide6.QtWidgets import QMessageBox
+    warnings = []
+    monkeypatch.setattr(QMessageBox, 'warning', lambda parent, title, message: warnings.append(message))
+    yield
+    assert not warnings, '\n'.join(warnings)
+
+
 def wait_for_job(app, window):
     deadline = time.monotonic()+30
     while window.job and window.job.isRunning():
