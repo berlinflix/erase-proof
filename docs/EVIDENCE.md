@@ -48,3 +48,9 @@ Every new destructive logical job has a stable identifier. Audit inspection
 lists starts that lack a completion or recorded incomplete event. This detects
 process/power interruptions without inventing a successful resume or rollback.
 Inspect the target and start a fresh verification before making any assurance.
+
+The compatibility field `all_filesystem_copies_verified` is deliberately false
+for scoped file/offline records. It does not invalidate successful recorded
+checks; it prevents an assertion about every unknown, changed or external copy.
+Use the operation scope, history readback, preserved-file measurements and
+independent tool results to assess the current-image evidence.

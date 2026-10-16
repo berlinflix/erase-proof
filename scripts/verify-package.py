@@ -45,9 +45,12 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-extracted-") as temporary:
     assert doctor["version"] == version
     provenance = json.loads((binary.parent/'BUILD-SOURCE.json').read_text())
     assert provenance['software_version'] == version
-    assert provenance['tracked_worktree_modified'] is False, 'Commit verified source/docs before the final release package.'
+    assert provenance['tracked_worktree_modified'] is not True, 'Commit verified source/docs before the final release package.'
     assert doctor["native_direct_io"] and doctor["offline_ext4_adapter"]
     assert (binary.parent/"THIRD-PARTY-LICENSES"/"Qt-and-PySide"/"LGPL-3.0.txt").is_file()
+    library_notices = binary.parent/'THIRD-PARTY-LICENSES/Ubuntu-libraries'
+    for prefix in ('libext2fs', 'libntfs-3g', 'libre2'):
+        assert any((folder/'copyright').is_file() for folder in library_notices.glob(prefix+'*')), prefix
     gui = subprocess.Popen([str(binary)], env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "HOME": temporary}, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     time.sleep(3)
     if gui.poll() is not None:

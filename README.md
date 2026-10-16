@@ -4,6 +4,11 @@ EraseProof is a **local Linux tool**, with a native Qt desktop application, a CL
 
 Target: **Ubuntu x86-64 in Oracle VirtualBox**. Development and automated testing use Ubuntu 22.04 under WSL2. Ubuntu 22.04/24.04 desktop can run the source distribution; the Linux binary is built on Ubuntu 22.04. A VirtualBox hardware/device acceptance run is still required on your VM.
 
+Get the application and optional bootable ISO from
+[GitHub Releases](https://github.com/berlinflix/erase-proof/releases).
+The [0.11 release guide](docs/RELEASE-0.11.md) covers installation, features,
+validation and the physical-media research boundaries.
+
 ## Run the source distribution in Ubuntu
 
 Copy/extract the project into your Ubuntu home directory, open a terminal there, and run:
@@ -24,7 +29,7 @@ The optional [Ubuntu 24.04 live-image workflow](docs/LIVE-UBUNTU.md) builds a se
 1. **Experiment → Create FAT32 experiment.** `mkfs.fat` formats an actual 64 MiB image. `mcopy` puts a viewable PNG, a valid PDF, a ZIP and text into it. Their original SHA-256 values are recorded.
 2. **Delete files normally.** `mdel` changes the real FAT32 directory entries and allocation table. It does not call EraseProof's overwriter or save an undo copy inside the image.
 3. **Recover files → Scan & recover.** The Sleuth Kit's `fls`/`icat` recover deleted metadata entries. EraseProof's own carver independently scans supported signatures and validates extracted formats. Open the actual recovered files and compare hashes with the originals. Metadata and carved copies are deliberately separate findings.
-4. **Erase & verify.** Choose the experiment image and type its exact filename in the confirmation dialog. The engine overwrites the actual image, flushes it with `fsync`, reads every logical byte back, checks native recovery/reference residues, and runs PhotoRec, Sleuth Kit and bulk_extractor. It issues an Ed25519 record only if the required checks pass.
+4. **Erase & verify.** Choose the unattached experiment image and type its exact filename in the confirmation dialog. Attached loop images are refused before writing. The engine overwrites the actual image, flushes it with `fsync`, reads every logical byte back, checks native recovery/reference residues, and runs PhotoRec, Sleuth Kit and bulk_extractor. It issues an Ed25519 record only if the required checks pass.
 5. Run recovery again. Supported signature candidates should be absent. Since the filesystem itself has been overwritten, filesystem parsing fails; this is reported explicitly, rather than counted as an independent clean forensic verdict.
 6. **Evidence.** Inspect/export signed JSON, PDF/QR reports and an anchored audit export. Modified signed payloads fail validation. Expected signer fingerprints establish which operator key you trust.
 

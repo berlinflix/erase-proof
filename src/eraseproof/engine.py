@@ -10,7 +10,7 @@ import uuid
 from . import carve
 from .evidence import EvidenceStore, now
 from .models import EraseProofError
-from .targets import describe, open_target, virtual_disk_policy
+from .targets import describe, open_target, virtual_disk_policy, require_unattached_image
 from . import nativeio
 
 
@@ -122,6 +122,8 @@ def plan(path, allow_device=None, confirmation=None):
         target = virtual_disk_policy(path, confirmation, allow_device)
     elif Path(path).suffix.lower() not in (".img", ".raw", ".dd", ".bin"):
         raise EraseProofError("Image overwrite requires a .img, .raw, .dd or .bin target.")
+    else:
+        require_unattached_image(target['path'])
     return {"target": target, "method": "single-pass-zero-overwrite", "verification": "complete-readback-and-recovery-attack",
             "confirmation": target["serial"], "physical_sanitization": False,
             "warning": "This changes the actual selected file or guest-visible virtual disk, including its filesystem."}
@@ -153,6 +155,8 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
             raise EraseProofError("Image size changed while opening.")
         if target["kind"] == "virtual-block-device":
             virtual_disk_policy(path, confirmation, allow_device)  # Fresh mount/identity check after open.
+        else:
+            require_unattached_image(target['path'])
         if progress:
             progress("Discover", 0, f"Identity pinned: {target['path']}")
         before = hash_stream(stream, target["size"], cancel)

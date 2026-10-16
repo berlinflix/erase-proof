@@ -1,8 +1,11 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
+import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,6 +20,43 @@ from eraseproof.targets import virtual_disk_policy
 @pytest.fixture
 def fat_case(tmp_path):
     return demo.create(tmp_path/"fat-case")
+
+
+def test_attached_image_refused_before_any_overwrite(tmp_path, monkeypatch):
+    import eraseproof.targets as targets
+    image = tmp_path/'attached.img'
+    original = os.urandom(8192)
+    image.write_bytes(original)
+    calls = []
+    def attached(arguments, **kwargs):
+        calls.append(arguments)
+        return SimpleNamespace(returncode=0, stdout=b'/dev/loop-SYNTHETIC: attached', stderr=b'')
+    monkeypatch.setattr(targets.subprocess, 'run', attached)
+    with pytest.raises(EraseProofError, match='Detach'):
+        erase(image, image.name, tmp_path/'case')
+    assert calls[0] == ['losetup', '--associated', str(image)]
+    assert image.read_bytes() == original and not (tmp_path/'case').exists()
+
+
+def test_real_owned_loop_image_is_refused(tmp_path):
+    if os.geteuid() != 0 or os.environ.get('ERASEPROOF_TEST_PRIVATE_MOUNTS') != '1':
+        pytest.skip('Requires root in a private mount namespace; uses a newly generated loop image only')
+    image = tmp_path/'own-loop.img'
+    with image.open('xb') as stream:
+        stream.truncate(8*1024*1024)
+    before = hashlib.sha256(image.read_bytes()).hexdigest()
+    loop = subprocess.run(['losetup', '--find', '--show', str(image)], check=True, capture_output=True, text=True).stdout.strip()
+    association = json.loads(subprocess.run(['losetup', '--list', '--json', '--output', 'NAME,BACK-FILE', loop],
+                                             check=True, capture_output=True, text=True).stdout)['loopdevices'][0]
+    assert Path(association['back-file']).resolve() == image.resolve()
+    try:
+        with pytest.raises(EraseProofError, match='Detach'):
+            erase(image, image.name, tmp_path/'case')
+        assert hashlib.sha256(image.read_bytes()).hexdigest() == before
+        assert not (tmp_path/'case').exists()
+    finally:
+        subprocess.run(['losetup', '--detach', loop], check=True)
+    assert plan(image)['target']['size'] == image.stat().st_size
 
 
 def test_real_fat32_deletion_and_independent_recovery(fat_case, tmp_path):

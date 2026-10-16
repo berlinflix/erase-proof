@@ -21,11 +21,12 @@ if not (binary/"EraseProof").exists():
 shipped_version = subprocess.run([str(binary/'EraseProof'), '--cli', '--version'], capture_output=True, text=True, check=True).stdout.strip()
 if shipped_version != version:
     raise SystemExit('Executable/source version mismatch. Rebuild before packaging.')
-revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, text=True)
-tracked = subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=root, capture_output=True)
+revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, text=True) if shutil.which('git') else None
+commit = revision.stdout.strip() if revision and revision.returncode == 0 else None
+tracked = subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=root, capture_output=True) if commit else None
 (binary/'BUILD-SOURCE.json').write_text(json.dumps({'software_version': version,
-    'git_commit': revision.stdout.strip() if revision.returncode == 0 else None,
-    'tracked_worktree_modified': tracked.returncode != 0,
+    'git_commit': commit,
+    'tracked_worktree_modified': tracked.returncode != 0 if tracked else None,
     'provenance': 'Packaging metadata; not an independent reproducible-build attestation.'}, indent=2)+'\n')
 
 for name in ("cryptography", "Pillow", "pypdf", "reportlab", "qrcode", "pyahocorasick", "PySide6-Essentials", "shiboken6", "cffi", "pyinstaller", "typing_extensions", "charset-normalizer", "pycparser"):
@@ -45,7 +46,7 @@ if python_license.is_file():
 shutil.copytree(root/"docs"/"licenses", binary/"THIRD-PARTY-LICENSES"/"Qt-and-PySide", dirs_exist_ok=True)
 # PyInstaller discovers system ELF dependencies as well as wheel libraries.
 # Preserve Ubuntu copyright files and the full common license texts for them.
-system_packages = set()
+system_packages, system_candidates = set(), set()
 for bundled in (binary/"_internal").iterdir():
     if not bundled.is_file() or ".so" not in bundled.name:
         continue
@@ -53,11 +54,14 @@ for bundled in (binary/"_internal").iterdir():
         original = directory/bundled.name
         if not original.is_file():
             continue
-        for candidate in {str(original), str(original.resolve())}:
-            found = subprocess.run(["dpkg-query", "-S", candidate], capture_output=True, text=True)
-            if found.returncode == 0:
-                for line in found.stdout.splitlines():
-                    system_packages.add(line.split(": ", 1)[0].split(":", 1)[0])
+        system_candidates.update((str(original), str(original.resolve())))
+if system_candidates:
+    # One query avoids repeatedly loading the package index for every ELF.
+    # Missing aliases can yield status 1 alongside valid matches on stdout.
+    found = subprocess.run(['dpkg-query', '-S', *sorted(system_candidates)], capture_output=True, text=True)
+    for line in found.stdout.splitlines():
+        if ': ' in line:
+            system_packages.add(line.split(': ', 1)[0].split(':', 1)[0])
 for package in sorted(system_packages):
     copyright_file = Path("/usr/share/doc")/package/"copyright"
     if copyright_file.is_file():

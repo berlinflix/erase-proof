@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import stat
 import struct
 import subprocess
@@ -11,6 +12,17 @@ from .models import EraseProofError
 from .runtime import system_environment
 
 VIRTUAL_MODELS = ("vbox", "virtual disk", "vmware", "qemu", "virtio")
+
+
+def require_unattached_image(path):
+    if platform.system() != 'Linux' or not shutil.which('losetup'):
+        raise EraseProofError('Image erasure requires Linux losetup to check that the image is unattached.')
+    result = subprocess.run(['losetup', '--associated', str(Path(path).resolve())],
+                            capture_output=True, timeout=15, env=system_environment())
+    if result.returncode:
+        raise EraseProofError('Image attachment state could not be checked. No overwrite may start.')
+    if result.stdout.strip():
+        raise EraseProofError('Detach all loop devices associated with this image before erasure. Mounted or attached images are refused.')
 
 
 def devices() -> list[dict]:

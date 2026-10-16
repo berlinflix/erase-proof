@@ -46,10 +46,17 @@ distinct prior version, and validates the signed record.
 
 | Filesystem | Volume | Cleanup + verification | RRS | PhotoRec / TSK / bulk_extractor | Preserved file |
 | --- | --- | --- | --- | --- | --- |
-| FAT32 | 1 GiB | 103.924 s | 0 | All completed | Exact |
-| ext4 | 1 GiB | 53.070 s | 0 | All completed | Exact |
-| NTFS | 1 GiB | 51.924 s | 0 | All completed | Exact |
-| exFAT | 1 GiB | 37.066 s | 0 | All completed | Exact |
+| FAT32 | 1 GiB | 71.158 s | 0 | All completed | Exact |
+| ext4 | 1 GiB | 48.418 s | 0 | All completed | Exact |
+| NTFS | 1 GiB | 43.930 s | 0 | All completed | Exact |
+| exFAT | 1 GiB | 31.244 s | 0 | All completed | Exact |
+| exFAT | 8 GiB | 234.741 s | 0 | All completed | Exact |
+
+These are the repeated runs after replacing Python's per-byte zero tests with
+bounded zero-block comparisons. The earlier complete 1 GiB run also passed on
+all four filesystems; an earlier 8 GiB exFAT run passed in 345.168 seconds.
+Other validation jobs ran concurrently, so these timings are not a controlled
+performance comparison.
 
 The larger FAT32 run exposed PhotoRec extracting a whole filesystem container
 beyond the former 256 MiB file limit. The operation correctly refused a
