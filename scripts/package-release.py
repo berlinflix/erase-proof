@@ -124,7 +124,7 @@ source = output/f"EraseProof-source-{version}.zip"
 paths = [root/name for name in ("README.md", "pyproject.toml", ".gitattributes", ".gitignore")]
 for directory in ("src", "tests", "scripts", "docs", "native"):
     paths.extend(p for p in (root/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts
-                 and p.suffix not in (".pyc", ".so") and p.name not in ("eraseproof-ext4", "eraseproof-ntfs", "eraseproof-ext4-journal"))
+                 and p.suffix not in (".pyc", ".so") and "resources/native" not in p.as_posix())
 with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as file:
     for path in sorted(paths):
         info = zipfile.ZipInfo.from_file(path, arcname=str(Path(f"EraseProof-source-{version}")/path.relative_to(root)))

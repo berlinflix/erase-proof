@@ -25,12 +25,16 @@ def validate_references(references):
     if block_size not in (512, 4096):
         raise EraseProofError("Reference block size must be 512 or 4096.")
     hashes = refs.get("block_hashes", [])
+    file_hashes = refs.get("file_hashes", [])
     patterns = refs.get("metadata_patterns", [])
     if not isinstance(hashes, list) or any(not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h) for h in hashes):
         raise EraseProofError("Reference hashes must be lowercase SHA-256 values.")
+    if not isinstance(file_hashes, list) or any(not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h) for h in file_hashes):
+        raise EraseProofError("Reference file hashes must be lowercase SHA-256 values.")
     if not isinstance(patterns, list) or any(not isinstance(p, str) or not re.fullmatch(r"(?:[0-9a-fA-F]{2}){1,65536}", p) for p in patterns):
         raise EraseProofError("Metadata patterns must be hex strings containing 1–65536 bytes.")
-    return {"block_size": block_size, "block_hashes": sorted(set(hashes)), "metadata_patterns": sorted(set(p.lower() for p in patterns))}
+    return {"block_size": block_size, "block_hashes": sorted(set(hashes)), "metadata_patterns": sorted(set(p.lower() for p in patterns)),
+            "file_hashes": sorted(set(file_hashes))}
 
 
 def hash_stream(stream, length, cancel=None):
@@ -57,6 +61,8 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
         raise EraseProofError("Reference block size must be 512 or 4096.")
     block_hashes = set(refs.get("block_hashes", []))
     patterns = [bytes.fromhex(p) for p in refs.get("metadata_patterns", [])]
+    from .matching import Matcher
+    matcher = Matcher(patterns)
     if any(not p or len(p) > 65536 for p in patterns):
         raise EraseProofError("Metadata patterns must contain 1–65536 bytes.")
     matched_hashes, matched_patterns = set(), set()
@@ -82,12 +88,10 @@ def verify(path, references=None, progress=None, cancel=None, stream=None, lengt
                                 block_findings.append({"sha256": hash_value, "offset": checked+offset})
                             matched_hashes.add(hash_value)
             window = carry+data
-            for i, pattern in enumerate(patterns):
-                at = window.find(pattern)
-                if at >= 0:
-                    if i not in matched_patterns and len(pattern_findings) < 1000:
-                        pattern_findings.append({"pattern_index": i, "offset": checked-len(carry)+at, "length": len(pattern)})
-                    matched_patterns.add(i)
+            for at, i in matcher.first(window):
+                if i not in matched_patterns and len(pattern_findings) < 1000:
+                    pattern_findings.append({"pattern_index": i, "offset": checked-len(carry)+at, "length": len(patterns[i])})
+                matched_patterns.add(i)
             overlap = max((len(p)-1 for p in patterns), default=0)
             carry = window[-overlap:] if overlap else b""
             checked += len(data)
@@ -123,12 +127,14 @@ def plan(path, allow_device=None, confirmation=None):
 
 
 def erase(path, confirmation, evidence_dir, references=None, allow_device=None, progress=None, cancel=None):
+    from . import attackgate
     started_at, started = now(), time.monotonic()
     references = validate_references(references)  # Reject invalid jobs before the first destructive write.
     prepared = plan(path, allow_device, confirmation)
     target = prepared["target"]
     if confirmation != target["serial"]:
         raise EraseProofError("Type the exact image filename or virtual-device serial to confirm.")
+    attackgate.require_tools()
     store = EvidenceStore(evidence_dir)
     if not store.check():
         raise EraseProofError("Audit history is damaged. No overwrite was started.")
@@ -188,11 +194,18 @@ def erase(path, confirmation, evidence_dir, references=None, allow_device=None, 
                             "fsync_completed": True}
             if not result["passed"]:
                 raise EraseProofError("Residue detected after overwrite. No certificate issued.")
+            result["independent_attack"] = attackgate.check(path, store.root/(job+".attack"), references,
+                stream=stream, length=target["size"], expected_sha256=result["sha256"], zero_readback=True,
+                progress=progress, cancel=cancel)
+            result["passed"] &= result["independent_attack"]["passed"]
+            if not result["passed"]:
+                raise EraseProofError("Independent recovery check failed. No certificate issued.")
             if stat.S_ISREG(opened.st_mode) and os.fstat(stream.fileno()).st_size != target["size"]:
                 raise EraseProofError("Image size changed during verification. Certification refused.")
         except BaseException as error:
             os.fsync(stream.fileno())
-            store.append("erasure.incomplete", {"job": job, "target": target["path"], "bytes_written": written, "reason": str(error)})
+            store.append("erasure.incomplete", {"job": job, "target": target["path"], "bytes_written": written, "reason": str(error),
+                                               "verification": locals().get("result")})
             raise
         record = store.certify({"schema": "eraseproof.native-evidence.v1", "id": job,
                                 "started_at": started_at, "issued_at": now(), "duration_seconds": time.monotonic()-started,

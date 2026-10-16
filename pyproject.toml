@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "eraseproof"
-version = "0.7.0"
+version = "0.8.0"
 description = "Native Linux recovery and recovery-verified erasure workbench"
 requires-python = ">=3.10"
-dependencies = ["cryptography>=3.4", "Pillow>=12.2", "pypdf>=6.16", "reportlab>=4", "qrcode[pil]>=8"]
+dependencies = ["cryptography>=3.4", "Pillow>=12.2", "pypdf>=6.16", "reportlab>=4", "qrcode[pil]>=8", "pyahocorasick>=2.2,<3"]
 
 [project.optional-dependencies]
 desktop = ["PySide6-Essentials==6.8.3"]

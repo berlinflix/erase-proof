@@ -14,20 +14,26 @@ def available():
     return all(shutil.which(name) for name in ("fls", "icat"))
 
 
-def deleted(path, sector_offset=0):
+def deleted(path, sector_offset=0, *, fd=None):
     if not available():
         raise EraseProofError("The Sleuth Kit is not installed. Install Ubuntu package 'sleuthkit'.")
-    command = ["fls", "-d", "-r", "-p", "-F", "-o", str(sector_offset), str(Path(path).resolve())]
+    image = str(Path(path).resolve()) if fd is None else f"/proc/self/fd/{fd}"
+    command = ["fls", "-d", "-r", "-p", "-F", "-o", str(sector_offset), image]
     if sector_offset < 0:
         raise EraseProofError("Sector offset cannot be negative.")
     try:
-        result = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=120, env=system_environment())
+        result = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=120,
+                                pass_fds=() if fd is None else (fd,), env=system_environment())
     except subprocess.TimeoutExpired:
         raise EraseProofError("fls exceeded its 120-second time limit.") from None
     if result.returncode:
         raise EraseProofError(result.stderr.strip() or "fls could not parse this filesystem.")
+    return parse_deleted(result.stdout)
+
+
+def parse_deleted(text):
     candidates = []
-    for line in result.stdout.splitlines():
+    for line in text.splitlines():
         match = re.match(r"^\S+\s+\*\s+(\d[\d-]*)(?:\(realloc\))?:\s*(.*)$", line)
         if match:
             inode, name = match.groups()
@@ -37,7 +43,7 @@ def deleted(path, sector_offset=0):
     return candidates
 
 
-def recover(path, candidate, output_dir, sector_offset=0):
+def recover(path, candidate, output_dir, sector_offset=0, *, fd=None):
     if not re.fullmatch(r"\d[\d-]*", candidate.inode):
         raise EraseProofError("Invalid metadata address.")
     root = Path(output_dir).resolve()
@@ -46,8 +52,10 @@ def recover(path, candidate, output_dir, sector_offset=0):
     destination = root / f"inode_{candidate.inode}_{safe_name}"
     with destination.open("xb") as output:
         try:
-            result = subprocess.run(["icat", "-r", "-o", str(sector_offset), str(Path(path).resolve()), candidate.inode],
-                                    stdout=output, stderr=subprocess.PIPE, timeout=180, env=system_environment())
+            image = str(Path(path).resolve()) if fd is None else f"/proc/self/fd/{fd}"
+            result = subprocess.run(["icat", "-r", "-o", str(sector_offset), image, candidate.inode],
+                                    stdout=output, stderr=subprocess.PIPE, timeout=180,
+                                    pass_fds=() if fd is None else (fd,), env=system_environment())
         except subprocess.TimeoutExpired:
             output.close()
             destination.unlink(missing_ok=True)

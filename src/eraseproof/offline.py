@@ -84,6 +84,7 @@ def checked_image(path):
 
 
 def erase_with(adapter, path, internal_path, confirmation, evidence_dir, progress=None, cancel=None):
+    from . import attackgate
     info = checked_image(path)
     root = Path(evidence_dir).expanduser().resolve()
     if root == Path(info["path"]):
@@ -100,6 +101,7 @@ def erase_with(adapter, path, internal_path, confirmation, evidence_dir, progres
         prepared, entries = adapter.prepare(stream, info, internal_path)
         if confirmation != prepared["confirmation"]:
             raise EraseProofError("Confirm the image filename, colon, and exact internal path: "+prepared["confirmation"])
+        attackgate.require_tools()
         fd, selected = stream.fileno(), {e["path"] for e in prepared["selected"]}
         preserved, hashes = [], set()
         selected_files = []
@@ -167,6 +169,12 @@ def erase_with(adapter, path, internal_path, confirmation, evidence_dir, progres
                            "filesystem_consistency": adapter.consistency})
             if not result["passed"]:
                 raise EraseProofError("Target content/name or unallocated history residue remains in the image. No certificate issued.")
+            result["independent_attack"] = attackgate.check(path, store.root/(job+".attack"), references,
+                stream=stream, length=info["size"], expected_sha256=result["sha256"], progress=progress, cancel=cancel)
+            result["rrs"] = result["independent_attack"]["target_reference_matches"]/max(1, result["reference_count"])
+            result["passed"] &= result["independent_attack"]["passed"]
+            if not result["passed"]:
+                raise EraseProofError("Independent recovery check failed or target residue remains. No certificate issued.")
             return store.certify({"schema": "eraseproof.native-evidence.v1", "id": job,
                                   "operation": "offline-"+adapter.name+"-targeted-erasure", "issued_at": now(), "target": info,
                                   "plan": prepared, "verification": result, "assurance": prepared["scope"]})

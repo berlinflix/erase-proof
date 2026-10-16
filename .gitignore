@@ -30,3 +30,4 @@ __pycache__/
 /src/eraseproof/resources/native/eraseproof-ext4
 /src/eraseproof/resources/native/eraseproof-ntfs
 /src/eraseproof/resources/native/eraseproof-ext4-journal
+/src/eraseproof/resources/native/bulk_extractor

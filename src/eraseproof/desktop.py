@@ -361,7 +361,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.registered("Prepare overwrite…", self.prepare_erase, True))
         contents.addLayout(row)
         layout.addWidget(source)
-        plan_panel, methods = panel("The verification gate", "One zero pass → fsync → complete read-back → signature carving → known reference search → Ed25519 record. A cancelled or failed operation produces no certificate.")
+        plan_panel, methods = panel("The verification gate", "One zero pass → fsync → complete read-back → native recovery → PhotoRec, Sleuth Kit and bulk_extractor → Ed25519 record. Missing tools, incomplete attacks or residue prevent certification.")
         self.verification_details = QPlainTextEdit()
         self.verification_details.setReadOnly(True)
         self.verification_details.setPlaceholderText("Verification measurements and the selected plan appear here.\n\nPhysical ATA/NVMe sanitization, hidden areas, snapshots and flash remanence are not covered by logical overwrite.")

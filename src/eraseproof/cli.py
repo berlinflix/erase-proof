@@ -200,12 +200,14 @@ def main(argv=None):
             return desktop()
         if args.command == "doctor":
             from .nativeio import library
+            from .independent import bulk_tool
             output = {"version": __version__, "platform": platform.platform(), "python": sys.version.split()[0],
                       "tools": {name: shutil.which(name) for name in ("lsblk", "mkfs.fat", "mcopy", "mdel", "fls", "icat", "photorec", "nvme", "hdparm", "e2fsck", "ntfsfix", "ntfsresize", "ntfswipe", "fsck.exfat", "cryptsetup", "prlimit")},
                       "native_direct_io": library() is not None,
                       "offline_ext4_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4").is_file(),
                       "offline_ntfs_adapter": (Path(__file__).parent/"resources"/"native"/"eraseproof-ntfs").is_file(),
                       "offline_exfat_adapter": True,
+                      "bulk_extractor": bulk_tool(),
                       "ext4_journal_reader": (Path(__file__).parent/"resources"/"native"/"eraseproof-ext4-journal").is_file(),
                       "physical_device_sanitization": "guarded NVMe submission adapter; no physical hardware validation or certification", "native_interface": "Qt / PySide6"}
         elif args.command == "devices":

@@ -152,11 +152,13 @@ def reassemble_png(stream, offset, total, maximum_gap=65536):
 
 
 def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=None, length=None, fragmented=False):
+    from .matching import Matcher
+    matcher = Matcher([signature for signature, _ in SIGNATURES])
     owned = stream is None
     if owned:
         target = describe(path)
         stream, length = open_target(path), target["size"]
-    candidates, seen, offset, carry = [], set(), 0, b""
+    candidates, seen, offset, carry, attempted = [], set(), 0, b"", 0
     try:
         while offset < length:
             checkpoint(cancel)
@@ -166,14 +168,16 @@ def scan(path, progress=None, cancel=None, max_candidate=MAX_CANDIDATE, stream=N
                 raise EraseProofError("Short read while scanning; source changed or media read failed.")
             window, base = carry + data, offset-len(carry)
             hits = []
-            for signature, kind in SIGNATURES:
-                at = window.find(signature)
-                while at >= 0:
-                    candidate_offset = base+at-(4 if kind == "MP4" else 257 if kind == "TAR" else 0)
-                    if candidate_offset >= 0:
-                        hits.append((candidate_offset, kind))
-                    at = window.find(signature, at+1)
+            for at, index in matcher.iter(window):
+                kind = SIGNATURES[index][1]
+                candidate_offset = base+at-(4 if kind == "MP4" else 257 if kind == "TAR" else 0)
+                if candidate_offset >= 0:
+                    hits.append((candidate_offset, kind))
+                    if attempted+len(hits) > 100_000:
+                        raise EraseProofError("Signature hit limit exceeded; scan is incomplete, with no clean verdict.")
+            attempted += len(hits)
             for at, kind in sorted(hits):
+                checkpoint(cancel)
                 if at in seen or any(any(start <= at < start+size for start, size in c.segments or [[c.offset, c.length]]) for c in candidates):
                     continue
                 seen.add(at)

@@ -24,7 +24,7 @@ The optional [Ubuntu 24.04 live-image workflow](docs/LIVE-UBUNTU.md) builds a se
 1. **Experiment → Create FAT32 experiment.** `mkfs.fat` formats an actual 64 MiB image. `mcopy` puts a viewable PNG, a valid PDF, a ZIP and text into it. Their original SHA-256 values are recorded.
 2. **Delete files normally.** `mdel` changes the real FAT32 directory entries and allocation table. It does not call EraseProof's overwriter or save an undo copy inside the image.
 3. **Recover files → Scan & recover.** The Sleuth Kit's `fls`/`icat` recover deleted metadata entries. EraseProof's own carver independently scans supported signatures and validates extracted formats. Open the actual recovered files and compare hashes with the originals. Metadata and carved copies are deliberately separate findings.
-4. **Erase & verify.** Choose the experiment image and type its exact filename in the confirmation dialog. The engine overwrites the actual image, flushes it with `fsync`, reads every logical byte back, scans for carving signatures and known reference residues, and issues an Ed25519 record only if all checks pass.
+4. **Erase & verify.** Choose the experiment image and type its exact filename in the confirmation dialog. The engine overwrites the actual image, flushes it with `fsync`, reads every logical byte back, checks native recovery/reference residues, and runs PhotoRec, Sleuth Kit and bulk_extractor. It issues an Ed25519 record only if the required checks pass.
 5. Run recovery again. Supported signature candidates should be absent. Since the filesystem itself has been overwritten, filesystem parsing fails; this is reported explicitly, rather than counted as an independent clean forensic verdict.
 6. **Evidence.** Inspect/export signed JSON, PDF/QR reports and an anchored audit export. Modified signed payloads fail validation. Expected signer fingerprints establish which operator key you trust.
 
@@ -92,7 +92,7 @@ eraseproof recover /path/to/disk.img --sector-offset 2048 --output ~/EraseProof/
 eraseproof attack /path/to/disk.img --sector-offset 2048 --output ~/EraseProof/independent
 ```
 
-The desktop offers partition discovery and offset selection. Primary MBR/GPT entries are checked for bounds and overlap; GPT header and entry-array CRCs are verified. Extended MBR partitions require manual offsets. Carving covers the whole source regardless of metadata offset. Independent reports preserve actual PhotoRec/Sleuth Kit results, extracted files, logs, missing tools, timeouts and parsing failures. An unrecognized wiped filesystem is incomplete metadata coverage.
+The desktop offers partition discovery and offset selection. Primary MBR/GPT entries are checked for bounds and overlap; GPT header and entry-array CRCs are verified. Extended MBR partitions require manual offsets. Carving covers the whole source regardless of metadata offset. Independent reports preserve actual PhotoRec/Sleuth Kit/bulk_extractor results, extracted files/features, logs, missing tools, timeouts and parsing failures. An unrecognized wiped filesystem is incomplete metadata coverage. The [independent certification gate](docs/ATTACK-VERIFICATION.md) documents required completion, source integrity, limits and signed report digests.
 
 ## Actual secondary virtual disks
 
@@ -114,7 +114,7 @@ The **Media methods** page and CLI inspect native NVMe/ATA capabilities and soft
 
 This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
 
-Remaining work includes the complete media planner and independent verification loop, ATA destructive adapters, HPA/DCO changes, broader fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
+Remaining work includes the complete media planner, unifying FAT32's earlier allocation-only gate, ATA destructive adapters, HPA/DCO changes, broader fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
 
 Metadata recovery uses the real Sleuth Kit. The carver streams large sources in chunks; candidates are bounded to 256 MiB. PNG/ZIP checksums, bounded image decoding and strict PDF parsing provide format-specific evidence. Container-only checks are labelled. Confidence is a heuristic; it is not a probability or proof of semantic correctness.
 
@@ -127,12 +127,13 @@ Cancellation of a real overwrite is **not reversible**: the target may be partia
 ## Development
 
 ```bash
-sudo apt-get install -y gcc libext2fs-dev ntfs-3g-dev e2fsprogs ntfs-3g exfatprogs ffmpeg p7zip-full
-bash scripts/build-native.sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[desktop,test]'
+bash scripts/setup-ubuntu.sh
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 ```
+
+Mounted-driver exFAT tests additionally need an isolated root mount namespace;
+CI runs these with `unshare --mount --propagation private` and
+`ERASEPROOF_TEST_PRIVATE_MOUNTS=1`. They use only newly generated loop images.
 
 Tests exercise real FAT32 creation/deletion, TSK recovery with byte-for-byte SHA comparisons, native carving, overwrite/read-back, cancellation, signature tampering, audit tampering, virtual-disk safety guards and the native Qt background-job workflow. Source: [Sleuth Kit fls](https://www.sleuthkit.org/sleuthkit/man/fls.html), [icat](https://www.sleuthkit.org/sleuthkit/man/icat.html), [Qt for Python](https://doc.qt.io/qtforpython-6/).
 
