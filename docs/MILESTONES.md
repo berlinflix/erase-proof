@@ -25,5 +25,10 @@ VirtualBox acceptance tests are deliberately deferred at the user's request.
 | Remaining proposal work | ATA destructive/Format NVM/HPA/DCO adapters, ssdeep, broader arbitrary fragment reconstruction, public-corpus comparisons, physical-media/standards evaluation | Not delivered in 0.11; physical firmware behavior is unverified. Actual VirtualBox acceptance remains deferred. The complete research proposal is not claimed finished |
 
 Software tests use generated images and mock hardware command boundaries.
+The supplemental QEMU block-device test also passed exact unknown-format
+recovery from a generated raw disk, unchanged source reads, 64 MiB of native
+direct writes, signed evidence and a complete independent host-file zero check.
+Its script and [measured result](validation/virtual-block-0.11.json) are on main;
+the release archives retain their recorded build provenance.
 Firmware behavior and physical remanence cannot be measured without spare
 hardware. Such tests must stay explicitly unverified in release evidence.

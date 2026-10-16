@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "device_model": "QEMU HARDDISK",
+  "serial": "EPQA9e991c7af7b3",
+  "source_recovery_exact": true,
+  "recovery_source_unchanged": true,
+  "rrs_after_overwrite": 0.0,
+  "direct_bytes": 67108864,
+  "signed_record_valid": true,
+  "audit_intact": true,
+  "independent_tools": {
+    "PhotoRec": "completed",
+    "Sleuth Kit": "filesystem-unrecognized-or-error",
+    "bulk_extractor": "completed"
+  },
+  "metadata_gate": "superseded-by-complete-zero-readback",
+  "iso_sha256": "ad785f141f5bc854c2450a3881793135b0823b093a68aa95c6d0242f8dca6cdd",
+  "generated_writable_disks": 1,
+  "existing_or_physical_disks_attached": 0,
+  "network_devices": 0,
+  "host_disk_bytes": 67108864,
+  "host_disk_sha256_before": "4de61691cb507ee64c37f60f2883b8b5ef92bd1c0144abb45e9db16bb6d2bb58",
+  "host_disk_sha256_after": "3b6a07d0d404fab4e23b6d34bc6696a6a312dd92821332385e5af7c01c421351",
+  "virtualbox_tested": false,
+  "host_file_complete_zero_readback": true
+}

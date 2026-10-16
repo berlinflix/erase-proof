@@ -121,7 +121,13 @@ sudo .venv/bin/eraseproof erase /dev/sdb --allow-device /dev/sdb \
   --confirm EXACT_SERIAL --case /home/YOUR_USER/EraseProof/virtual-disk-evidence
 ```
 
-Device names are examples, not instructions to choose `/dev/sdb` blindly. Device writes have policy tests; an actual VirtualBox secondary-disk overwrite has not been run in this environment. Use the default filesystem-image demonstration until that acceptance test is completed. The desktop runs unprivileged and does not silently escalate permissions.
+Device names are examples, not instructions to choose `/dev/sdb` blindly. The
+raw-device route passed a disposable QEMU secondary-disk test: exact recovery of
+a fresh unknown-format file, unchanged source during recovery, 64 MiB of actual
+direct writes, signed evidence and complete zero readback from outside the guest.
+An actual VirtualBox secondary-disk overwrite remains deferred. The desktop runs
+unprivileged and does not silently escalate permissions. See the
+[virtual-disk acceptance notes](docs/VIRTUALBOX-DEMO.md).
 
 ## Assurance and remaining work
 

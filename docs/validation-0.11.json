@@ -31,6 +31,7 @@
     "uefi_grub": "passed; 1024x768 desktop visually reviewed",
     "expanded_guest_workflow": "passed recovery, whole-image/FAT32/ext4/NTFS erasure, preserved files, Trash, planner, signed JSON/PDF/audit, Qt startup"
   },
+  "qemu_generated_secondary_disk": "passed; see validation/virtual-block-0.11.json for exact recovery, direct I/O and host zero-readback evidence",
   "oracle_virtualbox_acceptance": "deferred by user; not performed",
   "physical_firmware_or_remanence_validation": "not performed",
   "research_proposal_complete": false,

@@ -66,6 +66,13 @@ disabled to obtain that result. See [worker limits](ATTACK-VERIFICATION.md).
 
 ## Mutation and refusal checks
 
+The [supplemental block-device test](VIRTUALBOX-DEMO.md) additionally exercised
+the existing shipped executable on a uniquely identified generated QEMU disk.
+It recovered fresh unknown-format content from the raw block device without
+references, preserved the source during recovery, then performed a complete
+64 MiB direct overwrite with signed evidence. A separate host read verified
+the backing file was entirely zero. No existing or physical disks were attached.
+
 The regression suite deliberately reintroduces known and unknown bytes into
 free allocation, deleted directory/MFT/journal/USN history and file slack.
 Affected checks must refuse certification. Other cases include retained live
