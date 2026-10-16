@@ -23,7 +23,9 @@ def reject_unexpected_operation_dialogs(monkeypatch):
 
 
 def wait_for_job(app, window):
-    deadline = time.monotonic()+30
+    # Verification includes independently bounded scanners and fragment search.
+    # A 30-second UI test deadline can cancel healthy work on a busy build host.
+    deadline = time.monotonic()+180
     while window.job and window.job.isRunning():
         app.processEvents()
         if time.monotonic() > deadline:
