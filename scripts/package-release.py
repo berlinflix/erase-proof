@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser(description='Prepare notices/provenance and pac
 parser.add_argument('--prepare-only', action='store_true', help='Populate the verified bundle for a live-image refresh, without creating archives/checksums')
 args = parser.parse_args()
 from release_permissions import file_mode
+from bundle_manifest import NAME as bundle_manifest_name, seal as seal_bundle
 
 root = Path(__file__).resolve().parent.parent
 output = root/"artifacts"
@@ -23,6 +24,9 @@ from eraseproof import __version__ as version
 binary = root/"dist"/"EraseProof"
 if not (binary/"EraseProof").exists():
     raise SystemExit("Build the Linux executable first.")
+# Remove the ready marker before changing any prepared files. A failed or
+# concurrent preparation must never look like a completed live-image input.
+(binary/bundle_manifest_name).unlink(missing_ok=True)
 shipped_version = subprocess.run([str(binary/'EraseProof'), '--cli', '--version'], capture_output=True, text=True, check=True).stdout.strip()
 if shipped_version != version:
     raise SystemExit('Executable/source version mismatch. Rebuild before packaging.')
@@ -136,6 +140,7 @@ VirtualBox has not been operated by the developer in this session.
 Keep the whole EraseProof folder together; the _internal directory is needed.
 """)
 shutil.copytree(root/"docs", binary/"docs", dirs_exist_ok=True)
+seal_bundle(binary)
 if args.prepare_only:
     print(json.dumps({'bundle': str(binary), 'version': version, 'notices_and_provenance': 'prepared'}))
     raise SystemExit(0)

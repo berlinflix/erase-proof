@@ -14,8 +14,13 @@ for target in "$root/dev/pts" "$root/sys" "$root/proc"; do
 done
 grep -q '^CONFIG_SQUASHFS_ZSTD=y' "$(find "$root/boot" -maxdepth 1 -name 'config-*' | sort -V | tail -1)" || { echo 'Live kernel lacks built-in SquashFS zstd support'; exit 1; }
 scripts="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$scripts/bundle_manifest.py" verify "$bundle"
+manifest_hash="$(sha256sum "$bundle/BUNDLE-CONTENTS.json" | cut -d ' ' -f1)"
 stage="$(mktemp -d "$work/app-stage.XXXXXXXX")"
 cp -a -- "$bundle/." "$stage/"
+python3 "$scripts/bundle_manifest.py" verify "$stage"
+python3 "$scripts/bundle_manifest.py" verify "$bundle"
+[[ "$(sha256sum "$stage/BUNDLE-CONTENTS.json" | cut -d ' ' -f1)" == "$manifest_hash" && "$(sha256sum "$bundle/BUNDLE-CONTENTS.json" | cut -d ' ' -f1)" == "$manifest_hash" ]] || { echo 'Bundle changed during copy'; exit 1; }
 python3 "$scripts/release_permissions.py" "$stage" --root-owner
 if [[ -e "$root/opt/eraseproof" ]]; then
   mv -T -- "$root/opt/eraseproof" "$work/previous-app-$(date +%s%N)"

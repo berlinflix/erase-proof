@@ -41,6 +41,9 @@ with tarfile.open(artifacts/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz") as arc
 with tempfile.TemporaryDirectory(prefix="eraseproof-extracted-") as temporary:
     subprocess.run(["tar", "-xzf", str(artifacts/f"EraseProof-Ubuntu-x86_64-{version}.tar.gz"), "-C", temporary], check=True)
     binary = Path(temporary)/"EraseProof"/"EraseProof"
+    sys.path.insert(0, str(root/'scripts'))
+    from bundle_manifest import verify as verify_bundle
+    verify_bundle(binary.parent)
     doctor = json.loads(subprocess.run([str(binary), "--cli", "doctor"], capture_output=True, text=True, check=True).stdout)
     assert doctor["version"] == version
     provenance = json.loads((binary.parent/'BUILD-SOURCE.json').read_text())
