@@ -37,6 +37,12 @@ exFAT drivers, including plain text and unknown file extensions. Ext4 journal
 inode recovery complements signature carving when unlink has cleared current
 allocation metadata.
 
+For an ordinary Ubuntu file-manager **Move to Trash**, use **Browse Ubuntu
+Trash** on Recover files. It copies existing Trash items, including unknown file
+formats and folders, into a new output folder without changing the original.
+[Trash recovery and permanent deletion](docs/UBUNTU-TRASH.md) explains the two
+paths and the permissions needed to read a raw disk.
+
 ## CLI
 
 ```bash
@@ -59,6 +65,10 @@ CLI results are JSON; progress goes to stderr. Verification uses exit code 2 for
 ## Targeted file and folder operations
 
 The native **Targeted erasure** page and CLI support these operations:
+
+The desktop opens on **Recover files**. Device inventory can select a real disk
+or partition for read-only recovery. In Targeted erasure, list an offline image,
+select its file or folder in the table, and inspect the plan before confirming.
 
 - `file-plan` / `erase-files`: pin each ordinary file's identity, overwrite and read back its current bytes, then unlink. Symlinks, hard links, protected system paths, cross-device trees and evidence inside the target are refused. The signed record explicitly excludes journals, snapshots and previous copies.
 - `fat32-list` / `fat32-plan` / `fat32-erase`: validate an offline FAT32 volume image, remove selected allocation, and clear all free clusters, inactive directory records and file slack. Preserved-file hashes, `fsck.fat -n`, full history readback and independent attacks must pass. This removes other deleted history on the volume. See [FAT32 scope and validation](docs/OFFLINE-FAT32.md).
@@ -114,7 +124,13 @@ The **Media methods** page and CLI inspect native NVMe/ATA capabilities and soft
 
 This release implements **logical overwrite and recovery verification**, not the entire research proposal. A VM cannot prove physical SSD/NVMe sanitization on the host. VirtualBox snapshots, the host's image history, storage caches and physical FTL remanence are outside its evidence scope.
 
-Remaining work includes the complete media planner, ATA destructive adapters, HPA/DCO changes, broader fragment reconstruction, physical-media evaluation and independently assessed standards mapping. There is no claim that this release securely deletes every copy of a host file or fulfills NIST/IEEE sanitization requirements.
+`media-plan TARGET` supplies the read-only method matrix used by the desktop,
+including executable commands, capability failures, hidden-capacity gates and
+disabled methods. ATA destructive adapters, HPA/DCO changes, broader fragment
+reconstruction, physical-media evaluation and independently assessed standards
+mapping remain outside the implemented scope. There is no claim that this
+release securely deletes every copy of a host file or fulfills NIST/IEEE
+sanitization requirements.
 
 Metadata recovery uses the real Sleuth Kit. The carver streams large sources in chunks; candidates are bounded to 256 MiB. PNG/ZIP checksums, bounded image decoding and strict PDF parsing provide format-specific evidence. Container-only checks are labelled. Confidence is a heuristic; it is not a probability or proof of semantic correctness.
 

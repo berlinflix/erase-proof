@@ -167,7 +167,8 @@ class MainWindow(QMainWindow):
         self.recovered = []
         self._build()
         self.refresh_evidence()
-        self.switch(0)
+        self.last_recovery_output = None
+        self.switch(1)
 
     def _build(self):
         surface = QWidget()
@@ -336,13 +337,21 @@ class MainWindow(QMainWindow):
         row.addStretch()
         row.addWidget(self.registered("Independent attack", self.start_independent_attack))
         settings.addLayout(row)
+        row = QHBoxLayout()
+        row.addWidget(label('Moved to Trash in Ubuntu’s file manager?', wrap=True), 1)
+        row.addWidget(self.registered('Browse Ubuntu Trash…', self.browse_trash))
+        settings.addLayout(row)
         layout.addWidget(options)
         findings, contents = panel("Recovered files", "Metadata findings and carved copies are listed separately. Open an extracted file to inspect the actual recovered content.")
-        self.results = table(["FILE", "METHOD", "BYTES", "SHA-256 / EVIDENCE"])
+        self.results = table(["FILE", "METHOD / CONFIDENCE", "BYTES", "SHA-256 / EVIDENCE"])
         self.results.doubleClicked.connect(self.open_recovered)
         self.results.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         contents.addWidget(self.results, 1)
-        contents.addWidget(button("Open selected recovered file", self.open_recovered))
+        row = QHBoxLayout()
+        row.addWidget(button("Open selected recovered file", self.open_recovered))
+        row.addWidget(button("Open recovery folder", self.open_recovery_folder))
+        row.addStretch()
+        contents.addLayout(row)
         layout.addWidget(findings, 1)
         self.stack.addWidget(page)
 
@@ -400,12 +409,17 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        inventory, box = panel("Read-only Linux discovery", "Actual lsblk data. Only recognized secondary virtual disks with a serial and no mounted children are eligible for logical overwrite. Physical disk sanitize/secure-erase commands are not enabled.")
+        inventory, box = panel("Read-only Linux discovery", "Select the source disk or partition for recovery. Save recovered files to another disk. Whole-disk logical erasure requires a recognized unmounted secondary virtual disk, an allowlisted path and its exact serial.")
         box.addWidget(self.registered("Refresh devices", self.refresh_devices))
         self.devices_table = table(["PATH", "MODEL", "SIZE", "SERIAL", "MOUNTS / STATE"])
         self.devices_table.doubleClicked.connect(self.select_device)
         box.addWidget(self.devices_table)
-        box.addWidget(label("Double-click a device to inspect its path in Erase & verify. This does not start a write.", wrap=True))
+        row = QHBoxLayout()
+        row.addWidget(self.registered("Use for recovery", self.select_device, True))
+        row.addWidget(self.registered("Inspect erasure target", lambda: self.select_device(erasure=True)))
+        row.addStretch()
+        box.addLayout(row)
+        box.addWidget(label("Double-click to select a recovery source. Selection does not modify the device. Unmount the source before recovery to avoid ongoing filesystem writes.", wrap=True))
         layout.addWidget(inventory, 1)
         self.stack.addWidget(page)
 
@@ -434,10 +448,21 @@ class MainWindow(QMainWindow):
         self.fat_image = QLineEdit()
         self.source_row(box, self.fat_image)
         row = QHBoxLayout()
-        self.fat_internal = QLineEdit("/REPORT.PDF")
+        self.fat_internal = QLineEdit()
+        self.fat_internal.setPlaceholderText("Select a file/folder below, or enter /internal/path")
         row.addWidget(self.fat_internal, 1)
         row.addWidget(self.registered("List image files", self.list_fat))
-        row.addWidget(self.registered("Erase image path…", self.erase_fat_target, True))
+        box.addLayout(row)
+        self.offline_entries = table(["PATH IN IMAGE", "TYPE", "BYTES"])
+        self.offline_entries.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.offline_entries.itemSelectionChanged.connect(self.select_offline_entry)
+        box.addWidget(self.offline_entries)
+        self.fat_image.textChanged.connect(self.clear_offline_entries)
+        self.offline_filesystem.currentTextChanged.connect(self.clear_offline_entries)
+        row = QHBoxLayout()
+        row.addWidget(self.registered("Inspect offline plan", self.inspect_offline_plan))
+        row.addStretch()
+        row.addWidget(self.registered("Erase selected image path…", self.erase_fat_target, True))
         box.addLayout(row)
         layout.addWidget(offline)
         self.targeted_details = QPlainTextEdit()
@@ -475,12 +500,12 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(page)
 
     def inspect_media(self):
-        from .media import probe
+        from .media import decision, probe
         path = self.media_source.text().strip()
         def done(result):
             self.media_details.setPlainText(json.dumps(result, indent=2))
             self.status_label.setText("Capability inspection complete. No media command was submitted.")
-        self.execute(lambda progress, cancel: probe(path), done)
+        self.execute(lambda progress, cancel: decision(probe(path)), done)
 
     def inspect_nvme_status(self):
         from .media import nvme_status
@@ -525,11 +550,34 @@ class MainWindow(QMainWindow):
         from .offline import backend
         adapter = backend(self.offline_filesystem.currentText())
         path = self.fat_image.text()
-        return self.execute(lambda progress, cancel: adapter.list_paths(path),
-                            lambda result: self.targeted_details.setPlainText(json.dumps(result, indent=2)))
+        def done(result):
+            fill_table(self.offline_entries, [(e['path'], 'Folder' if e['kind'] == 'd' else 'File', e.get('size', '—')) for e in result])
+            self.targeted_details.setPlainText(json.dumps(result, indent=2))
+            self.status_label.setText(f"{len(result)} allocated paths listed. Select the file or folder to inspect its erasure plan.")
+        return self.execute(lambda progress, cancel: adapter.list_paths(path), done)
+
+    def clear_offline_entries(self, *_):
+        self.offline_entries.setRowCount(0)
+        self.fat_internal.clear()
+
+    def select_offline_entry(self):
+        row = self.offline_entries.currentRow()
+        if row >= 0 and self.offline_entries.item(row, 0):
+            self.fat_internal.setText(self.offline_entries.item(row, 0).text())
+
+    def inspect_offline_plan(self):
+        from .offline import backend
+        adapter = backend(self.offline_filesystem.currentText())
+        path, internal = self.fat_image.text().strip(), self.fat_internal.text().strip()
+        def done(result):
+            self.targeted_details.setPlainText(json.dumps(result, indent=2))
+            self.status_label.setText("Plan inspected. Selected allocation and all deleted volume history will be removed; unrelated allocated files will be hash-checked.")
+        self.execute(lambda progress, cancel: adapter.plan_path(path, internal), done)
 
     def erase_fat_target(self):
-        path, internal = self.fat_image.text(), self.fat_internal.text()
+        path, internal = self.fat_image.text().strip(), self.fat_internal.text().strip()
+        if not path or not internal or internal.strip('/') == '':
+            return self.on_error("Choose an image and a file or folder inside it first. The volume root cannot be selected.")
         filesystem = self.offline_filesystem.currentText().lower()
         expected = Path(path).name+":"+"/"+internal.strip("/")
         warnings = {"ext4": "This also clears ALL unallocated history, unused inodes, directory slack and inactive journal blocks on this ext4 image.",
@@ -587,7 +635,7 @@ class MainWindow(QMainWindow):
             return
         for item in self.action_buttons:
             item.setEnabled(False)
-        self.busy_inputs = self.findChildren(QLineEdit)+self.findChildren(QComboBox)+self.findChildren(QCheckBox)
+        self.busy_inputs = self.findChildren(QLineEdit)+self.findChildren(QComboBox)+self.findChildren(QCheckBox)+self.findChildren(QTableWidget)
         for item in self.busy_inputs:
             item.setEnabled(False)
         self.cancel_button.setEnabled(True)
@@ -653,9 +701,13 @@ class MainWindow(QMainWindow):
         mode = ("both", "deleted", "carve")[self.mode.currentIndex()]
         def done(report):
             self.recovered = [c for c in report["candidates"] if c["length"] > 0]
+            self.last_recovery_output = output
             methods = {"sleuthkit-metadata": "Filesystem", "ext4-journal-inode": "Ext4 journal", "pdf-earlier-revision": "Earlier PDF revision"}
-            fill_table(self.results, [(c["name"], methods.get(c["method"], "Carving"), c["length"], c["sha256"]) for c in self.recovered])
-            self.status_label.setText(f"Recovery complete: {len(self.recovered)} nonempty findings saved to {output}" + (f" · {len(report['warnings'])} warnings recorded in recovery.json" if report["warnings"] else ""))
+            fill_table(self.results, [(c["name"], methods.get(c["method"], "Carving")+
+                                      (f" · {c['confidence']}/100" if c['confidence'] else ' · unscored'),
+                                      c["length"], c["sha256"]) for c in self.recovered])
+            unique = len({c['sha256'] for c in self.recovered})
+            self.status_label.setText(f"Recovery complete: {len(self.recovered)} findings, {unique} unique contents. Saved to {output}" + (f" · {len(report['warnings'])} warnings in recovery.json" if report["warnings"] else ""))
             self.progress_bar.setValue(1000)
         fragmented = self.fragments.isChecked()
         try:
@@ -696,6 +748,54 @@ class MainWindow(QMainWindow):
         if 0 <= row < len(self.recovered):
             if not open_local(self.recovered[row]["output"]):
                 self.on_error("A file viewer could not be launched. Install xdg-utils and a viewer for this format.")
+
+    def open_recovery_folder(self):
+        if self.last_recovery_output and self.last_recovery_output.is_dir():
+            if not open_local(self.last_recovery_output):
+                self.on_error("The recovery folder could not be opened.")
+
+    def browse_trash(self):
+        from .trash import listing, recover as recover_trash
+        def choose(report):
+            if not report['entries']:
+                return QMessageBox.information(self, 'Ubuntu Trash', 'No supported items were found in your home Trash. For another mounted volume, use trash-list --trash-root. Permanently deleted files require disk/image recovery.')
+            dialog = QDialog(self)
+            dialog.setWindowTitle('Copy from Ubuntu Trash')
+            dialog.resize(760, 470)
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(label('Select an item to copy to your recovery folder. The Trash original stays in place.', wrap=True))
+            items = table(['ORIGINAL PATH', 'DELETED AT', 'TYPE'])
+            fill_table(items, [(e['original_path'], e['deleted_at'], e['kind']) for e in report['entries']])
+            items.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            layout.addWidget(items, 1)
+            if report['warnings']:
+                layout.addWidget(label(f"{len(report['warnings'])} invalid, missing or unsupported entries were skipped.", wrap=True))
+            actions = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+            copy = actions.addButton('Copy selected item', QDialogButtonBox.ButtonRole.AcceptRole)
+            copy.setEnabled(False)
+            items.itemSelectionChanged.connect(lambda: copy.setEnabled(items.currentRow() >= 0))
+            actions.accepted.connect(dialog.accept)
+            actions.rejected.connect(dialog.reject)
+            layout.addWidget(actions)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            entry = report['entries'][items.currentRow()]
+            output = Path(self.recovery_destination.text()).expanduser()/('trash-'+uuid.uuid4().hex[:12])
+            # The listing worker has finished; queue the copy after its finished
+            # signal restores control state, including when the dialog is fast.
+            from PySide6.QtCore import QTimer
+            def start():
+                if self.job and self.job.isRunning():
+                    return QTimer.singleShot(20, start)
+                def done(result):
+                    self.recovered = result['candidates']
+                    self.last_recovery_output = output
+                    fill_table(self.results, [(e['name'], 'Ubuntu Trash · copied', e['length'], e['sha256']) for e in self.recovered])
+                    self.status_label.setText(f"Copied {len(self.recovered)} Trash files to {output}. Trash originals are unchanged.")
+                    self.progress_bar.setValue(1000)
+                self.execute(lambda progress, cancel: recover_trash(entry['id'], output, report['root'], progress, cancel), done)
+            QTimer.singleShot(0, start)
+        self.execute(lambda progress, cancel: listing(), choose)
 
     def show_plan(self):
         try:
@@ -834,11 +934,11 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Linux inventory refreshed. No device was modified.")
         self.execute(lambda progress, cancel: devices(), done)
 
-    def select_device(self, *_):
+    def select_device(self, *_, erasure=False):
         row = self.devices_table.currentRow()
         if row >= 0:
             self.set_target(self.device_rows[row]["name"])
-            self.switch(2)
+            self.switch(2 if erasure else 1)
 
     def closeEvent(self, event):
         if self.job and self.job.isRunning():

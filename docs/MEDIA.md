@@ -6,6 +6,16 @@ Queries that fail stay unknown; this version never changes HPA/DCO or sets an
 ATA security password. ATA destructive commands need a separately evaluated
 adapter before they can be enabled.
 
+`media-plan TARGET` applies a read-only method matrix. The native Media methods
+page displays the same plan. It prefers advertised, eligible NVMe crypto sanitize
+then block sanitize, lists disabled Format NVM/ATA methods explicitly, and
+provides a separate guarded command for an executable method. An image can use
+verified logical overwrite; a LUKS2 image also offers scoped keyslot removal.
+ATA visible/native/DCO capacities must agree before the planner reports no
+capacity reduction. Missing or contradictory queries remain unknown. USB/SD
+visible overwrite does not imply access to hidden flash pages. Recovery failure
+never automatically broadens a confirmed file/image operation into a device wipe.
+
 NVMe sanitize is controller-wide. The CLI supports planning and explicit
 submission for a local, single-controller device with all allocated namespaces
 attached and visible. It refuses mounted/read-only children, kernel holders,
@@ -13,6 +23,9 @@ missing namespaces, multi-controller/port configurations, unsupported actions,
 busy/failing sanitize logs, missing serials and unmatched allowlists. It holds
 all namespace devices with Linux exclusive opens during submission and checks
 the identity/inventory again. Evidence must reside on another device.
+Namespace ownership is resolved through sysfs controller ancestry, **not** by
+matching the number in `/dev/nvmeXnY` to `/dev/nvmeX`. Native multipath heads
+without unambiguous ownership are refused by the inventory gate.
 
 ```bash
 eraseproof media-probe /path/to/experiment.img

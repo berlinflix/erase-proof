@@ -36,6 +36,28 @@ def number(value):
     return int(value, 0) if isinstance(value, str) else int(value)
 
 
+def controller_namespaces(controller, inventory=None, sysfs=Path('/sys')):
+    """Match sysfs ancestry, never the numeric spelling of an NVMe device.
+
+    Namespace names use a subsystem instance number on some kernels. Native
+    multipath heads cannot be safely claimed by this single-controller adapter.
+    """
+    parent = (sysfs/'class/nvme'/Path(controller).name).resolve(strict=True)
+    result = []
+    for root in devices() if inventory is None else inventory:
+        node = sysfs/'class/block'/Path(root['name']).name
+        if parent not in node.resolve().parents:
+            continue
+        nsid = node/'nsid'
+        if not nsid.is_file():
+            continue
+        identifier = int(nsid.read_text())
+        if identifier <= 0 or any(n['id'] == identifier for n in result):
+            raise EraseProofError('Ambiguous NVMe namespace inventory; execution is blocked.')
+        result.append({'id': identifier, 'device': root})
+    return sorted(result, key=lambda n: n['id'])
+
+
 def nvme_probe(controller):
     path = Path(controller)
     if not re.fullmatch(r"/dev/nvme\d+", str(path)) or path.is_symlink() or not stat.S_ISCHR(path.stat().st_mode):
@@ -45,11 +67,7 @@ def nvme_probe(controller):
     namespace_ids = namespace_data.get("nsid_list")
     if not isinstance(namespace_ids, list) or any(not isinstance(n, int) or n <= 0 for n in namespace_ids):
         raise EraseProofError("Unsupported namespace inventory response; controller execution is blocked.")
-    namespaces = []
-    for root in devices():
-        if re.fullmatch(re.escape(str(path))+r"n\d+", root["name"]):
-            nsid = Path("/sys/class/block")/Path(root["name"]).name/"nsid"
-            namespaces.append({"id": int(nsid.read_text()), "device": root})
+    namespaces = controller_namespaces(path)
     return {"kind": "nvme-controller", "path": str(path), "serial": str(identify.get("sn") or "").strip(),
             "model": str(identify.get("mn") or "").strip(), "identify": identify, "namespace_ids": sorted(namespace_ids),
             "namespaces": namespaces, "sanitize_log": command(["nvme", "sanitize-log", str(path), "-o", "json"], True),
@@ -171,6 +189,82 @@ def probe(path):
     else:
         result["recommendation"] = "visible-range-overwrite-only; flash-hidden-pages-not-proven"
     return result
+
+
+def decision(discovery):
+    """A read-only method matrix with explicit scope and executable support.
+
+    Capability preference is not a physical sanitization assurance rating.
+    Scope is never broadened automatically when a recovery attack finds data.
+    """
+    methods, blockers = [], []
+    def add(name, supported, reason, command=None, scope=''):
+        methods.append({'method': name, 'available': bool(supported), 'reason': reason,
+                        'command': command, 'scope': scope, 'physical_certificate': False})
+    if discovery.get('kind') == 'nvme-controller':
+        identify = discovery['identify']
+        for method in ('crypto-erase', 'block-erase'):
+            try:
+                prepared = nvme_plan(discovery, method, discovery['path'], discovery['serial'])
+                add('nvme-sanitize-'+method, True, 'Advertised and controller inventory gates passed.',
+                    ['eraseproof', 'nvme-submit', discovery['path'], '--method', method,
+                     '--allow-controller', discovery['path'], '--confirm', discovery['serial'], '--case', 'EVIDENCE_ON_ANOTHER_DEVICE'],
+                    prepared['scope'])
+            except (EraseProofError, ValueError) as error:
+                add('nvme-sanitize-'+method, False, str(error))
+        oacs, fna = number(identify.get('oacs', 0)), number(identify.get('fna', 0))
+        add('nvme-format-crypto', False,
+            'Advertised, but Format NVM execution is not enabled in this release.' if oacs & 2 and fna & 4 else 'Cryptographic Format NVM support was not established.')
+        add('nvme-format-user-data', False,
+            'Advertised, but Format NVM execution is not enabled in this release.' if oacs & 2 else 'Format NVM support was not established.')
+        target = {'path': discovery['path'], 'serial': discovery['serial'], 'model': discovery['model']}
+        hidden = {'state': 'controller-scoped', 'detail': 'All allocated namespaces must be visible. HPA/DCO are ATA mechanisms.'}
+    else:
+        target = discovery['target']
+        hidden = {'state': 'not-applicable-to-image'} if target['kind'] == 'image' else {'state': 'unknown'}
+        if target['kind'] == 'image':
+            add('logical-overwrite', True, 'Complete current image overwrite and full readback are implemented.',
+                ['eraseproof', 'erase', target['path'], '--confirm', target['serial'], '--case', 'EVIDENCE_DIRECTORY'], target['scope'])
+            if discovery.get('encryption') == 'LUKS2':
+                add('luks2-keyslot-removal', True, 'Removes active image keyslots; cached keys and header backups remain outside scope.',
+                    ['eraseproof', 'luks-erase', target['path'], '--confirm', target['serial'], '--case', 'EVIDENCE_DIRECTORY'],
+                    'Software keyslot-removal receipt; ciphertext is retained. Logical overwrite can follow as a separately confirmed operation.')
+        else:
+            from .targets import virtual_disk_policy
+            try:
+                virtual_disk_policy(target['path'], target['serial'], target['path'])
+                add('logical-overwrite', True, 'Recognized unmounted secondary virtual disk; actual submission rechecks identity.',
+                    ['eraseproof', 'erase', target['path'], '--allow-device', target['path'], '--confirm', target['serial'], '--case', 'EVIDENCE_ON_ANOTHER_DEVICE'], target['scope'])
+            except EraseProofError as error:
+                add('logical-overwrite', False, str(error), scope=target['scope'])
+            if discovery.get('transport') in ('sata', 'ata'):
+                hpa = discovery.get('hpa', {})
+                native = hpa.get('native_sectors')
+                dco_raw = discovery.get('checks', {}).get('dco', {}).get('raw', '')
+                maximum = re.search(r'Real max sectors:\s*(\d+)', dco_raw)
+                dco = int(maximum[1]) if maximum else None
+                if hpa.get('hidden'):
+                    hidden = {'state': 'hidden', 'hpa': hpa, 'dco_max_sectors': dco}
+                elif native and dco and dco == native and hpa.get('visible_sectors') == native:
+                    hidden = {'state': 'no-capacity-reduction-reported', 'hpa': hpa, 'dco_max_sectors': dco}
+                elif native and dco and dco > native:
+                    hidden = {'state': 'hidden', 'hpa': hpa, 'dco_max_sectors': dco}
+                else:
+                    hidden = {'state': 'unknown', 'hpa': hpa, 'dco_max_sectors': dco}
+                for method in ('ata-sanitize-crypto', 'ata-sanitize-block', 'ata-enhanced-secure-erase'):
+                    add(method, False, 'ATA destructive adapters require spare-hardware validation and are disabled. Raw IDENTIFY responses are retained in discovery.')
+                if hidden['state'] in ('hidden', 'unknown'):
+                    blockers.append('ATA hidden capacity is present or unknown. No whole-physical-media erasure claim is permitted; HPA/DCO changes are not automated.')
+            if discovery.get('transport') == 'nvme':
+                blockers.append('Inspect the real controller character device to plan controller-wide sanitization; namespace names do not establish controller ownership.')
+            if not discovery.get('rotational'):
+                blockers.append('Visible-sector overwrite cannot establish erasure of flash translation-layer pages, remapped blocks or overprovisioned space.')
+    available = [m['method'] for m in methods if m['available']]
+    return {'target': target, 'read_only': True, 'recommended': available[0] if available else None,
+            'methods': methods, 'hidden_areas': hidden, 'blockers': blockers,
+            'escalation': 'If attack finds residue, preserve the failed result. A stronger method or wider scope requires a new explicit plan and confirmation.',
+            'assurance': 'Software capability/eligibility plan. No physical sanitization or NIST/IEEE compliance certification.',
+            'discovery': discovery}
 
 
 def luks_metadata(stream):

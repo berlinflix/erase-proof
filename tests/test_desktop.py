@@ -29,6 +29,7 @@ def test_native_window_pages_and_background_recovery(tmp_path):
     window = MainWindow(tmp_path/"native-workspace")
     window.show()
     application.processEvents()
+    assert window.stack.currentIndex() == 1
     assert window.stack.count() == 7
     for index in range(7):
         window.switch(index)
@@ -89,9 +90,65 @@ def test_native_offline_targeted_workflow(tmp_path, monkeypatch, filesystem):
     window.list_fat()
     wait_for_job(application, window)
     assert "/private-case/" in window.targeted_details.toPlainText()
+    assert window.offline_entries.rowCount() > 0
+    for row in range(window.offline_entries.rowCount()):
+        if window.offline_entries.item(row, 0).text() == '/private-case':
+            window.offline_entries.selectRow(row)
+            break
+    application.processEvents()
+    assert window.fat_internal.text() == '/private-case'
+    window.inspect_offline_plan()
+    wait_for_job(application, window)
+    assert 'confirmation' in window.targeted_details.toPlainText()
     monkeypatch.setattr(QInputDialog, "getText", lambda *args, **kwargs: (image.name+":/private-case", True))
     window.erase_fat_target()
     wait_for_job(application, window)
     assert window.store.records()[0]["payload"]["verification"]["rrs"] == 0
     assert "Unrelated allocated files preserved" in window.status_label.text()
+    window.close()
+
+
+def test_device_selection_defaults_to_read_only_recovery(tmp_path):
+    application = QApplication.instance() or QApplication([])
+    from eraseproof.desktop import fill_table
+    window = MainWindow(tmp_path/'workspace')
+    window.device_rows = [{'name': '/dev/SYNTHETIC-PARTITION'}]
+    fill_table(window.devices_table, [['/dev/SYNTHETIC-PARTITION', 'Fixture', '1 GiB', '', 'Unmounted']])
+    window.devices_table.selectRow(0)
+    window.select_device()
+    assert window.stack.currentIndex() == 1
+    assert window.recovery_source.text() == '/dev/SYNTHETIC-PARTITION'
+    assert window.job is None
+    window.select_device(erasure=True)
+    assert window.stack.currentIndex() == 2
+    assert window.job is None
+    window.close()
+
+
+def test_native_trash_selection_copies_real_unknown_file(tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QDialog, QTableWidget
+    data_home = tmp_path/'data'
+    root = data_home/'Trash'
+    (root/'files').mkdir(parents=True)
+    (root/'info').mkdir()
+    data = os.urandom(12037)
+    (root/'files/unknown.custom').write_bytes(data)
+    (root/'info/unknown.custom.trashinfo').write_text('[Trash Info]\nPath=/original/unknown.custom\n')
+    monkeypatch.setenv('XDG_DATA_HOME', str(data_home))
+    def select(dialog):
+        dialog.findChild(QTableWidget).selectRow(0)
+        return QDialog.DialogCode.Accepted
+    monkeypatch.setattr(QDialog, 'exec', select)
+    application = QApplication.instance() or QApplication([])
+    window = MainWindow(tmp_path/'workspace')
+    window.browse_trash()
+    deadline = time.monotonic()+20
+    while not window.recovered and time.monotonic() < deadline:
+        application.processEvents()
+        time.sleep(.01)
+    wait_for_job(application, window)
+    assert len(window.recovered) == 1
+    assert Path(window.recovered[0]['output']).read_bytes() == data
+    assert (root/'files/unknown.custom').read_bytes() == data
+    assert 'Trash originals are unchanged' in window.status_label.text()
     window.close()

@@ -91,3 +91,63 @@ def test_luks_wrong_confirmation_does_not_change_image(tmp_path):
     with pytest.raises(EraseProofError):
         erase_luks_image(image, "wrong", tmp_path/"case")
     assert image.read_bytes() == b"original bytes"
+
+
+def test_nvme_sysfs_ownership_does_not_follow_device_number(tmp_path):
+    from eraseproof.media import controller_namespaces
+    sysfs = tmp_path/'sys'
+    actual = sysfs/'devices/pci/nvme/nvme7'
+    actual.mkdir(parents=True)
+    other = sysfs/'devices/pci/other/nvme/nvme99'
+    other.mkdir(parents=True)
+    (sysfs/'class/nvme').mkdir(parents=True)
+    (sysfs/'class/block').mkdir(parents=True)
+    (sysfs/'class/nvme/nvme7').symlink_to(actual, target_is_directory=True)
+    inventory = []
+    # Deliberately mismatched numbering: nvme2n1 belongs to controller nvme7.
+    for name, parent, identifier in [('nvme2n1', actual, 1), ('nvme7n1', other, 2)]:
+        node = parent/name
+        node.mkdir()
+        (node/'nsid').write_text(str(identifier))
+        (sysfs/'class/block'/name).symlink_to(node, target_is_directory=True)
+        inventory.append({'name': '/dev/'+name, 'type': 'disk'})
+    assert controller_namespaces('/dev/nvme7', inventory, sysfs) == [{'id': 1, 'device': inventory[0]}]
+
+
+def test_method_matrix_prefers_capable_sanitize_and_keeps_unsupported_explicit():
+    from eraseproof.media import decision
+    data = controller()
+    data['kind'] = 'nvme-controller'
+    result = decision(data)
+    assert result['read_only'] and result['recommended'] == 'nvme-sanitize-crypto-erase'
+    assert len([m for m in result['methods'] if m['available']]) == 2
+    assert all(m['physical_certificate'] is False for m in result['methods'])
+    data['sanitize_log']['sstat'] = 2
+    assert decision(data)['recommended'] is None
+
+
+@pytest.mark.parametrize('native,dco,state', [(1000, 1000, 'no-capacity-reduction-reported'),
+                                             (1000, 1200, 'hidden'), (1000, None, 'unknown')])
+def test_hidden_capacity_planner_never_treats_unknown_as_absent(monkeypatch, native, dco, state):
+    from eraseproof.media import decision
+    import eraseproof.targets as targets
+    monkeypatch.setattr(targets, 'virtual_disk_policy', lambda *args: (_ for _ in ()).throw(EraseProofError('Physical disk writes disabled')))
+    data = {'target': {'kind': 'block-device', 'path': '/dev/TEST-ONLY', 'serial': 'TEST', 'scope': 'visible only'},
+            'transport': 'sata', 'rotational': False,
+            'hpa': {'visible_sectors': 1000, 'native_sectors': native, 'hidden': False},
+            'checks': {'dco': {'raw': '' if dco is None else f'Real max sectors: {dco}'}}}
+    prepared = decision(data)
+    assert prepared['hidden_areas']['state'] == state
+    assert prepared['recommended'] is None
+    assert all(not m['available'] for m in prepared['methods'])
+    assert prepared['blockers']
+
+
+def test_image_plan_contains_actual_cli_without_running_it(tmp_path):
+    from eraseproof.media import decision
+    path = tmp_path/'a normal image.img'
+    path.write_bytes(b'unchanged')
+    result = decision(probe(path))
+    assert result['recommended'] == 'logical-overwrite'
+    assert str(path) in result['methods'][0]['command']
+    assert path.read_bytes() == b'unchanged'

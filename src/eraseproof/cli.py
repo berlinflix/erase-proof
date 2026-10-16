@@ -103,6 +103,12 @@ def parser():
     rs.add_argument("--mode", choices=["deleted", "carve", "both"], default="both")
     rs.add_argument("--sector-offset", type=int, default=0)
     rs.add_argument("--fragmented-png", action="store_true", help="Attempt one PNG chunk-boundary gap reconstruction within 64 KiB")
+    trash_list = sub.add_parser('trash-list', help='List existing Ubuntu Trash items without changing them')
+    trash_list.add_argument('--trash-root', help='A Freedesktop Trash store containing files/ and info/; defaults to the current user home Trash')
+    trash_recover = sub.add_parser('trash-recover', help='Copy a Trash item to a new output folder; keeps the Trash original')
+    trash_recover.add_argument('item', help='Exact item ID returned by trash-list')
+    trash_recover.add_argument('--trash-root')
+    trash_recover.add_argument('--output', required=True)
     vs = sub.add_parser("verify", help="Full zero read-back and adversarial residue scan")
     vs.add_argument("target")
     vs.add_argument("--references")
@@ -162,6 +168,8 @@ def parser():
     partitions.add_argument("--sector-size", type=int, choices=[512, 4096], default=512)
     media = sub.add_parser("media-probe", help="Inspect image encryption or native NVMe/ATA capabilities without writing")
     media.add_argument("target")
+    media_plan = sub.add_parser("media-plan", help="Read-only media method matrix, hidden-capacity gates and executable support")
+    media_plan.add_argument("target")
     for name in ("nvme-plan", "nvme-submit"):
         operation = sub.add_parser(name, help="Prepare or explicitly submit controller-wide NVMe sanitize; never issues an erasure certificate")
         operation.add_argument("controller")
@@ -208,6 +216,12 @@ def main(argv=None):
             output = demo.create(args.directory, args.deleted) if args.action == "create" else demo.delete(args.directory)
         elif args.command == "recover":
             output = recover(args.target, args.output, args.mode, args.sector_offset, progress, fragmented=args.fragmented_png)
+        elif args.command == 'trash-list':
+            from .trash import listing
+            output = listing(args.trash_root)
+        elif args.command == 'trash-recover':
+            from .trash import recover as recover_trash
+            output = recover_trash(args.item, args.output, args.trash_root, progress)
         elif args.command == "verify":
             output = verify(args.target, references(args.references), progress)
             status = 0 if output["passed"] else 2
@@ -272,6 +286,9 @@ def main(argv=None):
         elif args.command == "media-probe":
             from .media import probe
             output = probe(args.target)
+        elif args.command == "media-plan":
+            from .media import decision, probe
+            output = decision(probe(args.target))
         elif args.command in {fs+"-"+action for fs in ("fat32", "ext4", "ntfs", "exfat") for action in ("list", "plan", "erase")}:
             from .offline import backend
             filesystem, action = args.command.split("-", 1)
