@@ -32,6 +32,19 @@ def test_format_all_namespaces_preserves_layout_and_crypto_bits():
     assert prepared(data)["commands"] == [{"nsid": 1, "lbaf": 0, "ses": 2}]
 
 
+@pytest.mark.parametrize('capability', [None, 0, 3])
+def test_unknown_sanitize_status_only_allows_known_unsupported_controller(capability):
+    data = controller()
+    data['sanitize_log'] = {'sstat': -1}
+    if capability is not None:
+        data['identify']['sanicap'] = capability
+    if capability == 0:
+        assert prepared(data)['commands']
+    else:
+        with pytest.raises(EraseProofError, match='status is unknown'):
+            prepared(data)
+
+
 @pytest.mark.parametrize("mutation", ["mounted", "missing", "shared", "no-crypto", "no-format", "unknown-layout", "metadata", "protection", "busy", "all-layouts-differ"])
 def test_format_refuses_unsafe_or_unknown_scope(mutation):
     data = controller()

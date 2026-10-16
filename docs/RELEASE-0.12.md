@@ -6,6 +6,27 @@ CLI and separate bootable Ubuntu 24.04 live environment. Oracle VirtualBox
 acceptance remains deferred; spare physical-media evaluation is not represented
 as complete.
 
+## Run in your Ubuntu VM
+
+Download `EraseProof-Ubuntu-x86_64-0.12.0.tar.gz` from
+[GitHub Releases](https://github.com/berlinflix/erase-proof/releases) and extract
+it into your Ubuntu home folder. Open a terminal in the extracted `EraseProof`
+folder, then run:
+
+```bash
+bash install-runtime.sh
+./EraseProof
+```
+
+The app also appears in Ubuntu's application menu. Begin on **Recover files**:
+use **Browse Ubuntu Trash** for files moved to Trash, or select the unmounted
+disk/image for permanent-deletion recovery. Recovered files go to a separate
+destination. Neither route requires an original-file manifest.
+
+The optional live ISO boots a temporary Ubuntu session with its dependencies
+included. Export evidence before shutdown. See [live-image instructions](LIVE-UBUNTU.md)
+and the [VirtualBox demonstration](VIRTUALBOX-DEMO.md).
+
 ## Changes
 
 - Streaming ssdeep plus SHA-256/4 KiB fingerprints, retained 512-byte references,
@@ -46,8 +67,10 @@ Embedded files and partial reconstructions count as nonexact in this strict
 original-file-hash metric. Unsupported original file types remain in the recall
 denominator. These figures are not a promise of universal fragmented recovery.
 
-All **174 tests passed** on committed source `7b1361b` in a private root mount
-namespace. The standalone executable passed fresh PNG/JPEG reconstruction,
+The expanded **213-test regression passed** after the ATA coordinator and
+identity-binding changes, in a private root mount namespace. The final
+unknown-sanitize-status guard passed all 36 focused firmware/workflow checks.
+The standalone executable passed fresh PNG/JPEG reconstruction,
 independent ssdeep agreement, recovery/erasure, filesystem preservation, trusted
 signatures, attached PDF evidence, anchored audit and native Qt startup.
 

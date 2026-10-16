@@ -23,6 +23,8 @@ def plan(probe, method, allow_controller, confirmation):
     if method == "crypto" and not fna & 4:
         raise EraseProofError("Cryptographic Format NVM support was not advertised.")
     status = media.number(probe.get("sanitize_log", {}).get("sstat", -1))
+    if status == -1 and ('sanicap' not in identify or media.number(identify['sanicap']) & 7):
+        raise EraseProofError('Sanitize status is unknown on a sanitize-capable or unidentified controller; Format NVM is blocked.')
     if status != -1 and status & 7 not in (0, 1, 4):
         raise EraseProofError("Sanitize is busy/failed; Format NVM is blocked.")
     layouts = []
