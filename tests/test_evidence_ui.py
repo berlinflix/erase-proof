@@ -174,10 +174,15 @@ def test_json_save_dialog_accepts_a_path_through_real_qt_widgets(evidence_window
             dialog.reject()
         if isinstance(dialog, QFileDialog) and not seen:
             seen.append(True)
+            dialog.setDirectory(str(destination.parent))
+            app.processEvents()
             field = dialog.findChild(QLineEdit, 'fileNameEdit')
+            # Synthetic typing must not leave a platform completion popup
+            # grabbing the Save click. Filename completion is not under test.
+            field.setCompleter(None)
             field.setFocus()
             QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
-            QTest.keyClicks(field, str(destination))
+            QTest.keyClicks(field, destination.name)
             QTest.keyClick(field, Qt.Key.Key_Tab)
             QTest.qWait(30)
             buttons = dialog.findChild(QDialogButtonBox)

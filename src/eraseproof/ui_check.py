@@ -142,10 +142,15 @@ def main():
                     destination = root/name
                     def choose(dialog):
                         require(isinstance(dialog, QFileDialog), 'Expected a real Qt save dialog')
+                        dialog.setDirectory(str(destination.parent))
+                        app.processEvents()
                         field = dialog.findChild(QLineEdit, 'fileNameEdit')
+                        # Avoid platform completion popups grabbing synthetic
+                        # input; keep the real filename edit and Save button.
+                        field.setCompleter(None)
                         field.setFocus()
                         QTest.keyClick(field, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
-                        QTest.keyClicks(field, str(destination))
+                        QTest.keyClicks(field, destination.name)
                         QTest.keyClick(field, Qt.Key.Key_Tab)
                         QTest.qWait(30)
                         buttons = dialog.findChild(QDialogButtonBox)
