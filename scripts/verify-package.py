@@ -9,11 +9,17 @@ import tempfile
 import time
 import zipfile
 import tarfile
+import argparse
 
 root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root/"src"))
 from eraseproof import __version__ as version
-artifacts = root/"artifacts"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--artifacts', type=Path, default=root/'artifacts')
+parser.add_argument('--evidence-ui', action='store_true', help='Exercise selection, dialogs and exports inside the extracted frozen app')
+args = parser.parse_args()
+artifacts = args.artifacts.resolve()
+interaction_check = None
 for line in (artifacts/"SHA256SUMS").read_text().splitlines():
     expected, name = line.split("  ", 1)
     if Path(name).name != name:
@@ -60,4 +66,12 @@ with tempfile.TemporaryDirectory(prefix="eraseproof-extracted-") as temporary:
         raise RuntimeError(gui.stderr.read().decode(errors="replace"))
     gui.terminate()
     gui.wait(timeout=10)
-print(json.dumps({"version": version, "checksums": "passed", "source_hygiene": "passed", "extracted_linux_cli": "passed", "extracted_qt_startup": "passed", "virtualbox_tested": False}, indent=2))
+    if args.evidence_ui:
+        result = subprocess.run([str(binary), '--check-evidence-ui'],
+            env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'XDG_CONFIG_HOME': temporary},
+            capture_output=True, text=True, timeout=90)
+        if result.returncode:
+            raise RuntimeError(result.stderr[-8000:])
+        interaction_check = json.loads(result.stdout)
+        assert interaction_check['passed'] and interaction_check['frozen']
+print(json.dumps({"version": version, "checksums": "passed", "source_hygiene": "passed", "extracted_linux_cli": "passed", "extracted_qt_startup": "passed", "evidence_ui": interaction_check, "virtualbox_tested": False}, indent=2))

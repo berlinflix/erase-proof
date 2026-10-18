@@ -12,13 +12,14 @@ import platform
 
 parser = argparse.ArgumentParser(description='Prepare notices/provenance and package the verified Linux distribution')
 parser.add_argument('--prepare-only', action='store_true', help='Populate the verified bundle for a live-image refresh, without creating archives/checksums')
+parser.add_argument('--output-dir', type=Path, help='Write archives and checksums to a separate directory')
 args = parser.parse_args()
 from release_permissions import file_mode
 from bundle_manifest import NAME as bundle_manifest_name, seal as seal_bundle
 
 root = Path(__file__).resolve().parent.parent
-output = root/"artifacts"
-output.mkdir(exist_ok=True)
+output = args.output_dir.resolve() if args.output_dir else root/"artifacts"
+output.mkdir(parents=True, exist_ok=True)
 import sys
 sys.path.insert(0, str(root/"src"))
 from eraseproof import __version__ as version

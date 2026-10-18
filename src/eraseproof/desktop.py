@@ -8,7 +8,7 @@ import uuid
 import subprocess
 import shlex
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
+from PySide6.QtCore import Qt, QThread, Signal, QUrl, QSignalBlocker
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
@@ -69,6 +69,10 @@ QTableWidget { background: #fff; border: none; gridline-color: #edf0e7; selectio
 QHeaderView::section { border: none; border-bottom: 1px solid #e5eadc; background: #f6f9f1; color: #7c8f6b; font-size: 10px; padding: 11px 8px; }
 QTableWidget::item { padding: 9px; border-bottom: 1px solid #edf1e5; }
 QTableWidget::item:selected { background: #edf5e2; }
+QTableWidget#evidenceRecords::item:hover { background: #e3eddc; }
+QTableWidget#evidenceRecords::item:selected,
+QTableWidget#evidenceRecords::item:selected:!active,
+QTableWidget#evidenceRecords::item:selected:hover { background: #2c7052; color: #ffffff; }
 QProgressBar { border: none; border-radius: 3px; background: #e7edde; height: 5px; text-align: center; color: #536e42; }
 QProgressBar::chunk { background: #719b54; border-radius: 3px; }
 QPlainTextEdit { border: 1px solid #dfe7d5; border-radius: 5px; background: #fafcf6; font-family: 'DejaVu Sans Mono', monospace; color: #718760; font-size: 10px; }
@@ -110,8 +114,20 @@ def panel(title, description=""):
     return frame, layout
 
 
-def table(headers):
-    widget = QTableWidget(0, len(headers))
+class EvidenceTable(QTableWidget):
+    """Keep Qt's native row navigation; make both Enter keys open details."""
+    openRequested = Signal()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.openRequested.emit()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
+def table(headers, widget_class=QTableWidget):
+    widget = widget_class(0, len(headers))
     widget.setHorizontalHeaderLabels(headers)
     widget.horizontalHeader().setStretchLastSection(True)
     widget.verticalHeader().hide()
@@ -394,14 +410,30 @@ class MainWindow(QMainWindow):
         self.trusted_fingerprint.setPlaceholderText("Optional expected signer fingerprint - full SHA-256 from a trusted channel")
         self.trusted_fingerprint.setAccessibleName("Trusted operator signer fingerprint")
         box.addWidget(self.trusted_fingerprint)
-        self.records_table = table(["RECORD", "TARGET", "CHECKED BYTES", "ISSUED UTC"])
+        self.records_table = table(["RECORD", "TARGET", "CHECKED BYTES", "ISSUED UTC"], EvidenceTable)
+        self.records_table.setObjectName("evidenceRecords")
+        self.records_table.setAccessibleName("Signed operator records")
+        self.records_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.records_table.setMouseTracking(True)
         self.records_table.doubleClicked.connect(self.view_record)
+        self.records_table.openRequested.connect(self.view_record)
+        self.records_table.itemSelectionChanged.connect(self.update_record_actions)
         box.addWidget(self.records_table)
-        row = QHBoxLayout()
-        row.addWidget(button("View selected record", self.view_record))
-        row.addWidget(button("Export signed JSON…", self.export_record))
-        row.addWidget(button("Export PDF + QR…", self.export_pdf))
-        row.addStretch()
+        self.record_selection_label = label("Select a signed record to view or export. Use Up/Down to navigate and Enter to open.", wrap=True)
+        self.record_selection_label.setAccessibleName("Selected certificate")
+        self.record_selection_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        box.addWidget(self.record_selection_label)
+        self.view_record_button = button("View selected record", self.view_record)
+        self.export_record_button = button("Export signed JSON…", self.export_record)
+        self.export_pdf_button = button("Export PDF + QR…", self.export_pdf)
+        self.delete_image_button = button("Delete overwritten image file…", self.delete_verified_image)
+        self.delete_image_button.setToolTip("Recheck and remove the selected record's zero-filled image. Signed evidence is kept. Disks and attached images are refused.")
+        row = QGridLayout()
+        for position, control in enumerate((self.view_record_button, self.export_record_button, self.export_pdf_button, self.delete_image_button)):
+            control.setAccessibleName(control.text().rstrip('…'))
+            control.setCursor(Qt.CursorShape.PointingHandCursor)
+            control.setEnabled(False)
+            row.addWidget(control, position//2, position % 2)
         box.addLayout(row)
         row = QHBoxLayout()
         row.addWidget(button("Verify a record…", self.check_record))
@@ -686,9 +718,13 @@ class MainWindow(QMainWindow):
             return
         for item in self.action_buttons:
             item.setEnabled(False)
-        self.busy_inputs = self.findChildren(QLineEdit)+self.findChildren(QComboBox)+self.findChildren(QCheckBox)+self.findChildren(QTableWidget)
+        # Evidence browsing is read-only and remains usable while a storage job
+        # runs. Target controls retain their existing lock until job.finished.
+        self.busy_inputs = [item for item in self.findChildren(QLineEdit)+self.findChildren(QComboBox)+self.findChildren(QCheckBox)+self.findChildren(QTableWidget)
+                            if item is not self.records_table and item is not self.trusted_fingerprint]
         for item in self.busy_inputs:
             item.setEnabled(False)
+        self.delete_image_button.setEnabled(False)
         self.cancel_button.setEnabled(True)
         self.progress_bar.setValue(0)
         self.job = Job(operation)
@@ -908,26 +944,67 @@ class MainWindow(QMainWindow):
         self.execute(lambda progress, cancel: erase(path, info["serial"], self.store.root, refs, device, progress, cancel), done)
 
     def refresh_evidence(self):
+        selected = self.current_record()
+        selected_id = selected["payload"]["id"] if selected else None
         intact = self.store.check()
         self.records = self.store.records() if intact else []
-        fill_table(self.records_table, [(r["payload"]["id"][:19], Path(r["payload"]["target"]["path"]).name, r["payload"]["verification"]["bytes_checked"], r["payload"]["issued_at"][:19]) for r in self.records])
+        self.records_by_id = {record["payload"]["id"]: record for record in self.records}
+        # Replacing items can preserve Qt's old current row. Clear it while
+        # rebuilding, then restore only the same complete certificate ID.
+        with QSignalBlocker(self.records_table):
+            self.records_table.clearSelection()
+            self.records_table.setCurrentItem(None)
+            fill_table(self.records_table, [(r["payload"]["id"][:19], Path(r["payload"]["target"]["path"]).name, r["payload"]["verification"]["bytes_checked"], r["payload"]["issued_at"][:19]) for r in self.records])
+            for row, record in enumerate(self.records):
+                identifier = record["payload"]["id"]
+                item = self.records_table.item(row, 0)
+                item.setData(Qt.ItemDataRole.UserRole, identifier)
+                item.setToolTip(identifier)
+                if identifier == selected_id:
+                    self.records_table.setCurrentCell(row, 0)
+                    self.records_table.selectRow(row)
+        self.update_record_actions()
         unresolved = len(self.store.unresolved_jobs()) if intact else 0
         self.integrity_label.setText(f"Audit chain intact · {len(self.store.events())} events · {len(self.records)} records · {unresolved} jobs without completion evidence" if intact else "AUDIT INTEGRITY FAILED - evidence writes blocked. Preserve this case for investigation.")
 
     def current_record(self):
-        row = self.records_table.currentRow()
-        return self.records[row] if 0 <= row < len(self.records) else None
+        rows = self.records_table.selectionModel().selectedRows()
+        if len(rows) != 1:
+            return None
+        item = self.records_table.item(rows[0].row(), 0)
+        identifier = item.data(Qt.ItemDataRole.UserRole) if item else None
+        return getattr(self, "records_by_id", {}).get(identifier)
+
+    def update_record_actions(self):
+        from .imagecleanup import eligible
+        record = self.current_record()
+        for control in (self.view_record_button, self.export_record_button, self.export_pdf_button):
+            control.setEnabled(record is not None)
+        self.delete_image_button.setEnabled(eligible(record) and not (self.job and self.job.isRunning()))
+        self.record_selection_label.setText(
+            "Selected: "+record["payload"]["id"] if record else
+            "Select a signed record to view or export. Use Up/Down to navigate and Enter to open.")
+
+    def require_current_record(self):
+        record = self.current_record()
+        if record is None:
+            self.update_record_actions()
+            self.status_label.setText("Select a signed record in the Evidence table first.")
+        return record
 
     def view_record(self, *_):
-        record = self.current_record()
+        record = self.require_current_record()
         if not record:
             return
         dialog = QDialog(self)
         dialog.setWindowTitle("Signed verification evidence")
+        dialog.setObjectName("recordDetails")
         dialog.resize(760, 650)
         layout = QVBoxLayout(dialog)
         layout.addWidget(label("Ed25519 signature "+("VALID" if verify_record(record) else "INVALID"), "panelTitle"))
         body = QPlainTextEdit(json.dumps(record, indent=2))
+        body.setObjectName("signedRecordJson")
+        body.setAccessibleName("Signed certificate JSON")
         body.setReadOnly(True)
         layout.addWidget(body)
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -936,13 +1013,39 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def export_record(self):
-        record = self.current_record()
+        record = self.require_current_record()
         if record:
             self.export_json(record, record["payload"]["id"]+".epcert.json")
 
+    def delete_verified_image(self):
+        from .imagecleanup import prepare, remove
+        record = self.require_current_record()
+        if record is None:
+            return
+        if self.job and self.job.isRunning():
+            self.status_label.setText("Wait for the current operation before removing an image.")
+            return
+        try:
+            prepared = prepare(record, self.store.root)
+        except Exception as error:
+            return self.on_error(str(error))
+        text, accepted = QInputDialog.getText(
+            self, "Permanently remove the overwritten image",
+            f"{prepared['path']}\n\nThe entire image file will be removed after a fresh zero readback. "
+            "Your signed evidence will be kept. This does not remove snapshots or other copies."
+            "\n\nType the exact image filename: "+prepared['confirmation'])
+        if not accepted:
+            return
+        if text != prepared['confirmation']:
+            self.status_label.setText("Confirmation did not match. No file was removed.")
+            return
+        def done(result):
+            self.status_label.setText("Removed overwritten image: "+result['removed']+". Signed evidence and audit history were kept.")
+        self.execute(lambda progress, cancel: remove(record, prepared, text, self.store.root, progress, cancel), done)
+
     def export_pdf(self):
         from .certificate import render
-        record = self.current_record()
+        record = self.require_current_record()
         if not record:
             return
         path, _ = QFileDialog.getSaveFileName(self, "Export PDF with signed JSON attachment", str(self.workspace/(record["payload"]["id"]+".pdf")), "PDF (*.pdf)")
