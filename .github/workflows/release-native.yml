@@ -1,0 +1,121 @@
+name: Build and publish native maintenance release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-native.yml
+      - pyproject.toml
+      - src/eraseproof/__init__.py
+      - docs/RELEASE-0.12.1.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-maintenance-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+      - name: Identify maintenance version
+        id: version
+        run: |
+          version="$(PYTHONPATH=src python -c 'from eraseproof import __version__; print(__version__)')"
+          test "$version" = 0.12.1
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install build, filesystem and Qt runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libfuzzy-dev ssdeep foremost libjpeg-dev libsqlite3-dev libext2fs-dev ntfs-3g-dev e2fsprogs ntfs-3g exfatprogs exfat-fuse ffmpeg p7zip-full dosfstools mtools sleuthkit testdisk nvme-cli hdparm cryptsetup-bin curl autoconf automake flex libtool pkg-config libabsl-dev libexpat1-dev libgcrypt20-dev libgpg-error-dev libre2-dev libssl-dev zlib1g-dev libegl1 libopengl0 libglib2.0-bin libxcb-cursor0 libxkbcommon-x11-0 libxcb-xinerama0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libdbus-1-3 fonts-dejavu-core
+          python -m pip install -e '.[desktop,test]' pyinstaller
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/eraseproof/vendor
+          key: bulk-extractor-2.2.0-ubuntu22-x64-b9e15d40
+      - name: Build native adapters and independent scanner
+        run: |
+          bash scripts/build-native.sh
+          bash scripts/build-forensic-tools.sh
+          mkdir -p qa/release
+      - name: Test source engine and Qt workflows
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -o pipefail
+          python -m pytest -q -rs 2>&1 | tee qa/release/source-tests.log
+      - name: Test disposable filesystems in a private mount namespace
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          sudo unshare --mount --propagation private env ERASEPROOF_TEST_PRIVATE_MOUNTS=1 QT_QPA_PLATFORM=offscreen "$(command -v python)" -m pytest tests/test_native.py tests/test_fat32.py tests/test_exfat.py tests/test_desktop.py tests/test_fragments.py -q -rs -o faulthandler_timeout=120 2>&1 | tee qa/release/private-tests.log
+      - name: Build and exercise the standalone application
+        run: |
+          set -o pipefail
+          ERASEPROOF_BUILD_PYTHON="$(command -v python)" bash scripts/build-ubuntu.sh
+          python scripts/verify-frozen.py dist/EraseProof/EraseProof 2>&1 | tee qa/release/frozen-verification.log
+      - name: Package and verify extracted archives
+        run: |
+          set -o pipefail
+          python scripts/package-release.py
+          python scripts/verify-package.py 2>&1 | tee qa/release/package-verification.log
+          cp dist/EraseProof/BUILD-SOURCE.json qa/release/
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          import zipfile
+          archive = Path('artifacts/validation-0.12.1.zip')
+          with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as output:
+              for path in sorted(Path('qa/release').iterdir()):
+                  output.write(path, path.name)
+          with Path('artifacts/SHA256SUMS').open('a') as sums:
+              sums.write(f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n')
+          PY
+          cd artifacts
+          sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-release-0.12.1
+          path: artifacts/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-release-failure-logs
+          path: qa/release/
+          if-no-files-found: ignore
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-release-0.12.1
+          path: artifacts
+      - name: Publish verified maintenance release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          cd artifacts
+          sha256sum --check SHA256SUMS
+          gh release create "v$RELEASE_VERSION" ./* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "EraseProof $RELEASE_VERSION — verified recovery maintenance" \
+            --notes-file "../docs/RELEASE-$RELEASE_VERSION.md" --prerelease

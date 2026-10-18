@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import argparse
+import platform
 
 parser = argparse.ArgumentParser(description='Prepare notices/provenance and package the verified Linux distribution')
 parser.add_argument('--prepare-only', action='store_true', help='Populate the verified bundle for a live-image refresh, without creating archives/checksums')
@@ -32,14 +33,22 @@ if shipped_version != version:
     raise SystemExit('Executable/source version mismatch. Rebuild before packaging.')
 revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, text=True) if shutil.which('git') else None
 commit = revision.stdout.strip() if revision and revision.returncode == 0 else None
+build_platform = platform.freedesktop_os_release().get('PRETTY_NAME', platform.platform())
 tracked = subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=root, capture_output=True) if commit else None
 (binary/'BUILD-SOURCE.json').write_text(json.dumps({'software_version': version,
     'git_commit': commit,
     'tracked_worktree_modified': tracked.returncode != 0 if tracked else None,
+    'build_platform': build_platform,
     'provenance': 'Packaging metadata; not an independent reproducible-build attestation.'}, indent=2)+'\n')
 
 for name in ("cryptography", "Pillow", "pypdf", "reportlab", "qrcode", "pyahocorasick", "PySide6-Essentials", "shiboken6", "cffi", "pyinstaller", "typing_extensions", "charset-normalizer", "pycparser"):
-    distribution = importlib.metadata.distribution(name)
+    try:
+        distribution = importlib.metadata.distribution(name)
+    except importlib.metadata.PackageNotFoundError:
+        # Newer Python/dependency combinations need no typing backport.
+        if name != "typing_extensions":
+            raise
+        continue
     for entry in distribution.files or []:
         if any(token in str(entry).lower() for token in ("license", "copying", "notice")):
             original = Path(distribution.locate_file(entry))
@@ -92,7 +101,7 @@ versions = [f"{distribution.metadata['Name']}=={distribution.version}" for distr
 (binary/"install-runtime.sh").chmod(0o755)
 (binary/"README-FIRST.txt").write_text("""EraseProof — NATIVE UBUNTU APPLICATION
 
-This is a Linux x86-64 program, built on Ubuntu 22.04 under WSL.
+This is a Linux x86-64 program. See BUILD-SOURCE.json for its build platform.
 It has a native Qt desktop interface and needs no browser or web server.
 
 IN YOUR UBUNTU VIRTUALBOX VM:
@@ -133,7 +142,7 @@ remain outside the validated software evidence.
 Secondary virtual-disk writes are gated by a path/serial policy and require
 separate VirtualBox acceptance testing. Begin with the image experiment.
 
-WSL validation: automated engine and native Qt tests, real FAT32 recovery,
+Software validation: automated engine and native Qt tests, real FAT32 recovery,
 hash comparisons, overwrite/read-back, and executable-level workflow tests.
 VirtualBox has not been operated by the developer in this session.
 
@@ -159,7 +168,7 @@ with tarfile.open(archive, "w:gz") as file:
 
 source = output/f"EraseProof-source-{version}.zip"
 paths = [root/name for name in ("README.md", "pyproject.toml", ".gitattributes", ".gitignore")]
-for directory in ("src", "tests", "scripts", "docs", "native"):
+for directory in ("src", "tests", "scripts", "docs", "native", ".github"):
     paths.extend(p for p in (root/directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts
                  and p.suffix not in (".pyc", ".so") and "resources/native" not in p.as_posix())
 with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as file:

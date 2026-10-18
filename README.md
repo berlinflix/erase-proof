@@ -10,6 +10,11 @@ The [0.12 continuation guide](docs/RELEASE-0.12.md) and
 [0.11 preview release guide](docs/RELEASE-0.11.md) cover installation, features,
 validation and the physical-media research boundaries.
 
+The [0.12.1 maintenance release](docs/RELEASE-0.12.1.md) fixes certificate
+verification when PhotoRec produces files containing only zero bytes after a
+complete, verified whole-image overwrite. Use the 0.12.1 native archive for
+this fix; the older live ISO contains the earlier application.
+
 ## Run the source distribution in Ubuntu
 
 Copy/extract the project into your Ubuntu home directory, open a terminal there, and run:
