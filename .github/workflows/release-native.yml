@@ -8,7 +8,7 @@ on:
       - .github/workflows/release-native.yml
       - pyproject.toml
       - src/eraseproof/__init__.py
-      - docs/RELEASE-0.12.1.md
+      - docs/RELEASE-0.12.2.md
 
 permissions:
   contents: read
@@ -34,7 +34,7 @@ jobs:
         id: version
         run: |
           version="$(PYTHONPATH=src python -c 'from eraseproof import __version__; print(__version__)')"
-          test "$version" = 0.12.1
+          test "$version" = 0.12.2
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Install build, filesystem and Qt runtime dependencies
         run: |
@@ -65,18 +65,19 @@ jobs:
         run: |
           set -o pipefail
           ERASEPROOF_BUILD_PYTHON="$(command -v python)" bash scripts/build-ubuntu.sh
+          QT_QPA_PLATFORM=offscreen dist/EraseProof/EraseProof --check-evidence-ui 2>&1 | tee qa/release/evidence-ui.log
           python scripts/verify-frozen.py dist/EraseProof/EraseProof 2>&1 | tee qa/release/frozen-verification.log
       - name: Package and verify extracted archives
         run: |
           set -o pipefail
           python scripts/package-release.py
-          python scripts/verify-package.py 2>&1 | tee qa/release/package-verification.log
+          python scripts/verify-package.py --evidence-ui 2>&1 | tee qa/release/package-verification.log
           cp dist/EraseProof/BUILD-SOURCE.json qa/release/
           python - <<'PY'
           import hashlib
           from pathlib import Path
           import zipfile
-          archive = Path('artifacts/validation-0.12.1.zip')
+          archive = Path('artifacts/validation-0.12.2.zip')
           with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED) as output:
               for path in sorted(Path('qa/release').iterdir()):
                   output.write(path, path.name)
@@ -87,7 +88,7 @@ jobs:
           sha256sum --check SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: native-release-0.12.1
+          name: native-release-0.12.2
           path: artifacts/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -106,7 +107,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: native-release-0.12.1
+          name: native-release-0.12.2
           path: artifacts
       - name: Publish verified maintenance release
         env:

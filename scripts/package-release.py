@@ -13,6 +13,7 @@ import platform
 parser = argparse.ArgumentParser(description='Prepare notices/provenance and package the verified Linux distribution')
 parser.add_argument('--prepare-only', action='store_true', help='Populate the verified bundle for a live-image refresh, without creating archives/checksums')
 parser.add_argument('--output-dir', type=Path, help='Write archives and checksums to a separate directory')
+parser.add_argument('--bundle-dir', type=Path, help='Package a separately built application bundle')
 args = parser.parse_args()
 from release_permissions import file_mode
 from bundle_manifest import NAME as bundle_manifest_name, seal as seal_bundle
@@ -23,7 +24,7 @@ output.mkdir(parents=True, exist_ok=True)
 import sys
 sys.path.insert(0, str(root/"src"))
 from eraseproof import __version__ as version
-binary = root/"dist"/"EraseProof"
+binary = args.bundle_dir.resolve() if args.bundle_dir else root/"dist"/"EraseProof"
 if not (binary/"EraseProof").exists():
     raise SystemExit("Build the Linux executable first.")
 # Remove the ready marker before changing any prepared files. A failed or
